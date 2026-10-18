@@ -15,7 +15,10 @@ object OsCheck {
         "12" to 31..32, "13" to 33..33, "14" to 34..34, "15" to 35..35, "16" to 36..36,
     )
 
-    /** その API レベルで追加された(偽装では足せない)フレームワークのクラス */
+    /**
+     * その API レベルで追加された(偽装では足せない)フレームワークのクラス。
+     * OEM が省けるメインラインモジュールのクラスは誤判定の元になるので使わない。
+     */
     private val MARKER_CLASSES = listOf(
         21 to "android.app.job.JobScheduler",
         23 to "android.hardware.fingerprint.FingerprintManager",
@@ -26,8 +29,8 @@ object OsCheck {
         30 to "android.view.WindowInsets\$Type",
         31 to "android.os.VibratorManager",
         33 to "android.app.LocaleConfig",
-        34 to "android.health.connect.HealthConnectManager",
-        35 to "android.os.ProfilingManager",
+        34 to "android.credentials.CredentialManager",
+        35 to "android.app.ComponentCaller",
     )
 
     private fun classExists(name: String): Boolean = try {
@@ -89,10 +92,13 @@ object OsCheck {
             Item("API レベル固有機能の存在確認", "API ${MARKER_CLASSES.last { it.first <= sdk }.first} までの機能を確認", Status.OK)
         } else {
             val realLevel = MARKER_CLASSES.lastOrNull { (_, cls) -> classExists(cls) }?.first
+            // 最上位の1つだけ欠けている場合はOEMの独自ビルドの可能性もあるので「注意」に留める
+            val topLevel = MARKER_CLASSES.last { it.first <= sdk }.first
+            val onlyTop = missing.size == 1 && missing[0].first == topLevel
             Item(
                 "API レベル固有機能の存在確認",
                 "不足: " + missing.joinToString { "API${it.first}" },
-                Status.NG,
+                if (onlyTop) Status.WARN else Status.NG,
                 "名乗っている API $sdk に必要な機能がありません。実際は API ${realLevel ?: "?"} 程度の OS と推定されます。"
             )
         }
@@ -112,23 +118,31 @@ object OsCheck {
                 "ベンダー領域は OS 本体より古いことがありますが、system 側と大きく離れている場合は参考にしてください。")
         }
 
-        // 型番・ブランドの書き換えチェック: system 側だけ書き換えて vendor/odm 側が元のまま、という例が多い
+        // 型番・ブランドの書き換えチェック: 表示用の値だけ書き換えて vendor/odm 側が元のまま、という例が多い。
+        // system / product などは共通イメージ(qssi, mssi など)の汎用名が入るのが普通なので比較しない
         val fields = listOf("brand", "manufacturer", "model", "device", "name")
         val partitions = listOf("", "system.", "vendor.", "odm.", "product.", "system_ext.")
+        val compared = listOf("", "vendor.", "odm.")
+        val generic = Regex("""(?i)^(qssi.*|mssi.*|sys_mssi.*|missi.*|ossi.*|generic.*|aosp.*|full_.*|android|qti|qcom|mtk|mediatek|unisoc|sprd|unknown|alps)$""")
         val diffs = ArrayList<String>()
         val table = StringBuilder()
         for (f in fields) {
             val values = partitions.associateWith { p -> Sys.prop("ro.product.$p$f") }.filterValues { it.isNotEmpty() }
             if (values.isEmpty()) continue
             table.append(f).append(": ").append(values.entries.joinToString(" / ") { "${it.key.ifEmpty { "ro." }.trimEnd('.')}=${it.value}" }).append('\n')
-            if (values.values.map { it.lowercase() }.distinct().size > 1) diffs += f
+            if (f !in listOf("brand", "manufacturer", "model")) continue
+            val distinct = values.filterKeys { it in compared }.values
+                .map { it.trim().lowercase() }
+                .filterNot { generic.matches(it) }
+                .distinct()
+            if (distinct.size > 1) diffs += f
         }
         items += Item("端末", "${Build.MANUFACTURER} ${Build.MODEL} (${Build.BRAND} / ${Build.DEVICE})")
         if (table.isNotEmpty()) {
             items += Item(
                 "パーティション別の型番情報",
                 table.toString().trim(),
-                if (diffs.isEmpty()) Status.OK else Status.WARN,
+                if (diffs.isEmpty()) Status.INFO else Status.WARN,
                 if (diffs.isEmpty()) null
                 else "${diffs.joinToString()} がパーティションごとに異なります。OEM品の再ブランドで正常な場合もありますが、" +
                     "型番やメーカー名を書き換えている痕跡のこともあります。"

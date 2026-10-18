@@ -61,9 +61,13 @@ object BatteryCheck {
         // 現在の残電荷量と残量%から満充電時の容量を推定
         var estimate: Double? = null
         val counter = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
-        if (counter > 0 && counter != Long.MIN_VALUE && level != null && level >= 20) {
+        val est = if (counter > 0 && counter != Long.MIN_VALUE && level != null && level >= 20) {
+            counter / 1000.0 / (level / 100.0)
+        } else null
+        // 単位を誤って報告する端末があるので、ありえない値は使わない
+        if (est != null && est in 500.0..50_000.0) {
             val mah = counter / 1000.0
-            estimate = mah / (level / 100.0)
+            estimate = est
             items += Item(
                 "推定満充電容量 (残電荷から計算)",
                 "${estimate.toInt()} mAh (現在 ${mah.toInt()} mAh)",
@@ -71,7 +75,14 @@ object BatteryCheck {
                 "残量が多いほど精度が上がります。バッテリー残量計の精度に依存する目安です。"
             )
         } else {
-            items += Item("推定満充電容量 (残電荷から計算)", if (level != null && level < 20) "残量20%以上で計算できます" else "この端末は残電荷量を報告しません")
+            items += Item(
+                "推定満充電容量 (残電荷から計算)",
+                when {
+                    level != null && level < 20 -> "残量20%以上で計算できます"
+                    est != null -> "計算不可 (端末が報告する残電荷量が不正確)"
+                    else -> "この端末は残電荷量を報告しません"
+                }
+            )
         }
 
         val claimed = design ?: sysDesign
@@ -82,11 +93,12 @@ object BatteryCheck {
                 "設計容量と実容量の比",
                 "${Sys.f1(ratio * 100)}%",
                 when {
-                    ratio < 0.5 -> Status.NG
-                    ratio < 0.75 -> Status.WARN
+                    ratio < 0.35 -> Status.NG
+                    ratio < 0.7 -> Status.WARN
                     else -> Status.OK
                 },
-                if (ratio < 0.75) "実際に蓄えられる容量が設計値を大きく下回ります。容量の水増し表記か、バッテリーの劣化が考えられます。" else null
+                if (ratio < 0.7) "実際に蓄えられる容量が設計値を大きく下回ります。容量の水増し表記か、バッテリーの劣化が考えられます。" +
+                    "2セル構成の端末(折りたたみ等)では1セル分しか報告されず半分程度に出ることがあります。" else null
             )
         }
         items += Item(

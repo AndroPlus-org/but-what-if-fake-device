@@ -28,6 +28,23 @@ class StorageTest(
         private const val BLOCK = 1 shl 20
         private const val FILE_SIZE = 256L shl 20
         private const val MARGIN = 512L shl 20
+        private val TEST_FILE = Regex("""chunk_\d{5}\.bin""")
+
+        /** 画面の再生成などで別インスタンスが掃除を走らせても、実行中のテストのファイルは消さない */
+        @Volatile private var activeTests = 0
+
+        private fun testDir(ctx: Context): File = File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "h2test")
+
+        /**
+         * テスト用ファイルだけを削除する。アプリ専用フォルダ内の h2test/ にある
+         * chunk_NNNNN.bin 以外には触れない。中断で残ったファイルの掃除にも使う。
+         */
+        fun cleanup(ctx: Context) {
+            if (activeTests > 0) return
+            testDir(ctx).listFiles()?.forEach { f ->
+                if (f.isFile && TEST_FILE.matches(f.name)) f.delete()
+            }
+        }
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -38,7 +55,7 @@ class StorageTest(
     @Volatile var isRunning = false
         private set
 
-    fun dir(): File = File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "h2test")
+    fun dir(): File = testDir(ctx)
 
     fun freeBytes(): Long {
         val d = dir().apply { mkdirs() }
@@ -58,13 +75,15 @@ class StorageTest(
         cancelVerify = false
         verifying = false
         isRunning = true
+        synchronized(StorageTest::class.java) { activeTests++ }
         thread(name = "storagetest") {
             val section = try {
                 runTest(targetBytes)
             } catch (t: Throwable) {
                 Section("ストレージ実書き込みテスト結果", listOf(Item("エラー", t.toString(), Status.WARN)))
             } finally {
-                dir().listFiles()?.forEach { it.delete() }
+                synchronized(StorageTest::class.java) { activeTests-- }
+                cleanup(ctx)
             }
             handler.post {
                 isRunning = false
@@ -90,7 +109,7 @@ class StorageTest(
     private fun runTest(targetBytes: Long): Section {
         val d = dir()
         d.mkdirs()
-        d.listFiles()?.forEach { it.delete() }
+        d.listFiles()?.forEach { f -> if (f.isFile && TEST_FILE.matches(f.name)) f.delete() }
         val seed = Random().nextLong()
         val freeBefore = freeBytes()
         val target = (minOf(targetBytes, maxTarget()) / BLOCK) * BLOCK
@@ -202,12 +221,12 @@ class StorageTest(
             writeError?.let { "書き込み中にエラー: $it" }
         )
         val consumed = freeBefore - freeAfterWrite
-        if (written > 1L shl 30 && consumed < written / 2) {
+        if (written > 1L shl 30 && consumed < written / 4) {
             items += Item(
                 "空き容量の減り方",
                 "書き込み ${Sys.gb(written)} に対し空きは ${Sys.gb(consumed)} しか減っていない",
-                Status.NG,
-                "書いたデータがストレージに保存されていない可能性があります。"
+                Status.WARN,
+                "書いたデータが保存されていない可能性があります。ただし空き容量が減るとシステムが他アプリのキャッシュを削除するため、正常な端末でも起こることがあります。破損データの有無で判断してください。"
             )
         }
         items += Item("照合OK", Sys.gb(verified) + if (cancelVerify) " (照合を中断)" else "")

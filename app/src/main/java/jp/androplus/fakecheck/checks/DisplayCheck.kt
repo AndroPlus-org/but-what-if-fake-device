@@ -38,8 +38,8 @@ object DisplayCheck {
                 items += Item(
                     "解像度の差",
                     "描画 $w×$h ≠ パネル $pw×$ph",
-                    Status.WARN,
-                    "設定の「画面解像度」で下げているか、システムが拡大表示しています。設定で最高解像度にしてから再確認してください。"
+                    Status.INFO,
+                    "設定の「画面解像度」や省電力のための自動解像度切替で下げて描画しています。多くの端末の標準動作で、偽装ではありません。目視テストは最高解像度に設定してから行ってください。"
                 )
             }
             val modes = d.supportedModes
@@ -69,9 +69,9 @@ object DisplayCheck {
         items += Item(
             "画面サイズ (dpi値からの計算)",
             "${Sys.f1(diag)} インチ / ${Sys.f1(ppi)} ppi (xdpi=${Sys.f1(dm.xdpi.toDouble())}, ydpi=${Sys.f1(dm.ydpi.toDouble())})",
-            if (sane) Status.INFO else Status.WARN,
+            Status.INFO,
             if (sane) "定規で測った画面の対角と比べてください。大きく違う場合、ベンダー設定値が不正確です。"
-            else "dpi値が不自然で、画面サイズを正しく計算できません。"
+            else "この端末はdpi値を正しく設定していないため、画面サイズを計算できません (偽装とは限りません)。"
         )
         items += Item("論理密度", "${dm.densityDpi} dpi (scale ${Sys.f2(dm.density.toDouble())})")
 

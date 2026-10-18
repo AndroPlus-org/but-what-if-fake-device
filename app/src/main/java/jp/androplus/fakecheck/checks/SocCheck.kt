@@ -61,7 +61,7 @@ object SocCheck {
         if (gpu != null) {
             items += Item("GPU (OpenGL ES)", "${gpu.renderer}\n${gpu.vendor} / ${gpu.version}")
         } else {
-            items += Item("GPU (OpenGL ES)", "取得失敗", Status.WARN)
+            items += Item("GPU (OpenGL ES)", "取得失敗")
         }
 
         // 整合性チェック: 名乗っている SoC ベンダーと GPU が合っているか
