@@ -51,6 +51,19 @@ object Sys {
         return map
     }
 
+    /**
+     * ストレージ上のスワップ(zram 以外)の使用量。/proc/swaps は KiB 単位。
+     * zram は RAM を圧縮して使うだけなので物理RAMの外には出ない。
+     */
+    fun diskSwapUsedBytes(): Long {
+        var used = 0L
+        read("/proc/swaps")?.lineSequence()?.drop(1)?.forEach { line ->
+            val c = line.trim().split(Regex("\\s+"))
+            if (c.size >= 4 && !c[0].contains("zram")) used += (c[3].toLongOrNull() ?: 0L) * 1024
+        }
+        return used
+    }
+
     fun gb(bytes: Long): String = String.format(Locale.US, "%.2f GB", bytes / 1073741824.0)
     fun gbDec(bytes: Long): String = String.format(Locale.US, "%.1f GB(10進)", bytes / 1e9)
     fun mb(bytes: Long): String = String.format(Locale.US, "%.0f MB", bytes / 1048576.0)

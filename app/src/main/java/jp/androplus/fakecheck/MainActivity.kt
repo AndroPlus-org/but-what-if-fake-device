@@ -80,6 +80,8 @@ class MainActivity : Activity() {
         val night = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
         pal = Palette(night == Configuration.UI_MODE_NIGHT_YES)
         setContentView(buildLayout())
+        // 前回のストレージテストが強制終了などで中断していたら、残ったテスト用ファイルを消す
+        thread(name = "cleanup") { StorageTest.cleanup(applicationContext) }
         runStaticChecks()
     }
 

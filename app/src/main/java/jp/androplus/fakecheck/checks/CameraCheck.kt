@@ -40,7 +40,21 @@ object CameraCheck {
                     if (Build.VERSION.SDK_INT >= 23) map?.getHighResolutionOutputSizes(ImageFormat.JPEG)?.let { addAll(it) }
                 }.maxByOrNull { it.width.toLong() * it.height }
 
-                val sensorMp = if (active != null) active.width().toDouble() * active.height() / 1e6 else mp(pixelArray)
+                // 高画素センサー(クアッドベイヤー等)は最大解像度モード用の配列を別に持つので、大きい方を採る
+                var sensorMp = maxOf(
+                    if (active != null) active.width().toDouble() * active.height() / 1e6 else 0.0,
+                    mp(pixelArray)
+                )
+                if (Build.VERSION.SDK_INT >= 31) {
+                    c.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE_MAXIMUM_RESOLUTION)?.let { sensorMp = maxOf(sensorMp, mp(it)) }
+                    c.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE_MAXIMUM_RESOLUTION)?.let {
+                        sensorMp = maxOf(sensorMp, it.width().toDouble() * it.height() / 1e6)
+                    }
+                }
+                // 複数の物理カメラを束ねた論理カメラは、別センサーの解像度で出力することがあるので判定しない
+                val logical = Build.VERSION.SDK_INT >= 28 &&
+                    c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
+                        ?.contains(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA) == true
                 val jpegMp = mp(jpeg)
                 val hwLevel = when (c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)) {
                     CameraMetadata.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY -> "LEGACY"
@@ -53,9 +67,9 @@ object CameraCheck {
                 val value = "センサー ${Sys.f1(sensorMp)}MP" +
                     (pixelArray?.let { " (${it.width}×${it.height})" } ?: "") +
                     " / 最大出力 ${Sys.f1(jpegMp)}MP" + (jpeg?.let { " (${it.width}×${it.height})" } ?: "") +
-                    " / HW $hwLevel"
+                    " / HW $hwLevel" + if (logical) " / 論理マルチカメラ" else ""
                 // LEGACY HAL ではセンサー情報自体が出力サイズから作られていることがあるので判定しない
-                val interpolated = sensorMp > 0 && jpegMp > sensorMp * 1.1 && hwLevel != "LEGACY"
+                val interpolated = sensorMp > 0 && jpegMp > sensorMp * 1.1 && hwLevel != "LEGACY" && !logical
                 items += Item(
                     "$facing カメラ (id $id)",
                     value,

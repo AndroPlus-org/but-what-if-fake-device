@@ -14,7 +14,8 @@ import kotlin.math.max
 
 /**
  * MemTestService を起動し、/proc/meminfo を見ながら「物理RAMに実際に載せられた量」を測る。
- * スワップ(仮想RAM)が使われ始めた時点で物理RAMは埋まったとみなして終了する。
+ * 圧縮メモリ(zram)はRAM内にあるので物理RAMとして扱う。テストデータは乱数で圧縮が効かない。
+ * ストレージ上のスワップ(RAM拡張の一部方式)に押し出され始めたら、物理RAMは埋まったとみなして終了する。
  */
 class MemTestRunner(
     private val ctx: Context,
@@ -28,7 +29,7 @@ class MemTestRunner(
 
     private var total = 0L
     private var avail0 = 0L
-    private var swapFree0 = 0L
+    private var diskSwap0 = 0L
     private var swapTotal = 0L
     private var peakAlloc = 0L
     private var peakSwapDelta = 0L
@@ -50,7 +51,7 @@ class MemTestRunner(
         total = (mi["MemTotal"] ?: 0) * 1024
         avail0 = (mi["MemAvailable"] ?: mi["MemFree"] ?: 0) * 1024
         swapTotal = (mi["SwapTotal"] ?: 0) * 1024
-        swapFree0 = (mi["SwapFree"] ?: 0) * 1024
+        diskSwap0 = Sys.diskSwapUsedBytes()
         peakAlloc = 0; peakSwapDelta = 0; minAvail = Long.MAX_VALUE
         progressFile.delete()
 
@@ -78,19 +79,19 @@ class MemTestRunner(
 
             val mi = Sys.meminfo()
             val avail = (mi["MemAvailable"] ?: 0) * 1024
-            val swapFree = (mi["SwapFree"] ?: 0) * 1024
             minAvail = minOf(minAvail, avail)
-            peakSwapDelta = max(peakSwapDelta, swapFree0 - swapFree)
+            peakSwapDelta = max(peakSwapDelta, Sys.diskSwapUsedBytes() - diskSwap0)
 
             onProgress(
-                "RAM実測中… 確保 ${Sys.gb(peakAlloc)} / 空き ${Sys.gb(avail)} / スワップ使用増 ${Sys.mb(max(0, peakSwapDelta))}",
+                "RAM実測中… 確保 ${Sys.gb(peakAlloc)} / 空き ${Sys.gb(avail)}" +
+                    if (peakSwapDelta > 0) " / ストレージへのスワップ ${Sys.mb(peakSwapDelta)}" else "",
                 if (total > 0) (peakAlloc * 100 / total).toInt() else 0
             )
 
             when {
                 state.startsWith("ERROR") -> finish(state)
                 state == "LIMIT" -> finish("LIMIT")
-                // 物理RAMが埋まり、スワップに押し出され始めた
+                // 物理RAMが埋まり、ストレージ上のスワップに押し出され始めた
                 peakSwapDelta > 512L * 1048576 -> finish("SWAP")
                 avail in 1 until 64L * 1048576 && swapTotal == 0L -> finish("LOWMEM")
                 SystemClock.elapsedRealtime() - startedAt > 10 * 60_000 -> finish("TIMEOUT")
@@ -123,7 +124,7 @@ class MemTestRunner(
 
         val reasonText = when {
             reason == "KILLED" -> "メモリ不足でテストプロセスが強制終了 (正常な終わり方)"
-            reason == "SWAP" -> "物理RAMが埋まりスワップが使われ始めた"
+            reason == "SWAP" -> "物理RAMが埋まりストレージ上のスワップが使われ始めた"
             reason == "LOWMEM" -> "空きRAMがほぼゼロになった"
             reason == "LIMIT" -> "上限まで確保できた"
             reason == "USER" -> "ユーザーが中断"
@@ -132,7 +133,10 @@ class MemTestRunner(
         }
         items += Item("終了理由", reasonText)
         items += Item("テスト開始時", "MemTotal ${Sys.gb(total)} / 空き ${Sys.gb(avail0)} / 使用中 ${Sys.gb(othersAtStart)}")
-        items += Item("確保して書き込めた量", "${Sys.gb(peakAlloc)} (うちスワップ行き ${Sys.mb(swapDelta)})")
+        items += Item(
+            "確保して書き込めた量",
+            Sys.gb(peakAlloc) + if (swapDelta > 0) " (うちストレージへのスワップ ${Sys.mb(swapDelta)})" else ""
+        )
         items += Item(
             "推定物理RAM",
             "${Sys.gb(estimate)} (MemTotal の ${Sys.f1(ratio * 100)}%)",

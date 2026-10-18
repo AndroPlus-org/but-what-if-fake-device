@@ -63,7 +63,7 @@ object MemoryCheck {
             items += Item(
                 "仮想RAM / RAM拡張 (スワップ)",
                 "${Sys.gb(swapTotal)} (使用中 ${Sys.gb(swapTotal - swapFree)})",
-                Status.WARN,
+                Status.INFO,
                 "ストレージや圧縮メモリ(zram)を使った仮想メモリで、物理RAMではありません。" +
                     "「RAM ${combined.fmtGb()}」のように物理+仮想の合計で宣伝されている場合、実際の物理RAMは ${nominalRamGb(kernelTotal).fmtGb()} です。"
             )

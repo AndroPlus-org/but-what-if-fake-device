@@ -67,16 +67,22 @@ class RefreshRateMeter(
         val medianMs = intervals[intervals.size / 2]
         val medianFps = 1000.0 / medianMs
         val d = DisplayCheck.display(activity)
-        val claimed = if (Build.VERSION.SDK_INT >= 23) d.supportedModes.maxOf { it.refreshRate }.toDouble() else d.refreshRate.toDouble()
+        // 高いレートが低解像度モードにしか無い端末があるので、今の解像度で選べる最大値と比べる
+        val claimed = if (Build.VERSION.SDK_INT >= 23) {
+            val cur = d.mode
+            d.supportedModes
+                .filter { it.physicalWidth == cur.physicalWidth && it.physicalHeight == cur.physicalHeight }
+                .maxOfOrNull { it.refreshRate }?.toDouble() ?: cur.refreshRate.toDouble()
+        } else d.refreshRate.toDouble()
         val ratio = medianFps / claimed
         val items = listOf(
-            Item("申告最大リフレッシュレート", "${Sys.f1(claimed)} Hz"),
+            Item("申告最大リフレッシュレート (現在の解像度)", "${Sys.f1(claimed)} Hz"),
             Item(
                 "実測 (フレーム間隔の中央値)",
                 "${Sys.f1(medianFps)} fps (${Sys.f2(medianMs)} ms)",
                 when {
                     ratio >= 0.9 -> Status.OK
-                    ratio >= 0.7 -> Status.WARN
+                    ratio >= 0.6 -> Status.WARN
                     else -> Status.NG
                 },
                 when {
