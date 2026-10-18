@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -49,6 +50,24 @@ class MainActivity : Activity() {
     private lateinit var stopButton: Button
     private lateinit var spinner: SpinnerView
 
+    /** ライト / ダークで切り替える配色 */
+    private class Palette(dark: Boolean) {
+        val background = if (dark) 0xFF121212.toInt() else 0xFFF3F5F7.toInt()
+        val card = if (dark) 0xFF1E2327.toInt() else Color.WHITE
+        val cardStroke = if (dark) 0xFF2F363B.toInt() else 0xFFDDE1E5.toInt()
+        val progressCard = if (dark) 0xFF3A3220.toInt() else 0xFFFFF8E1.toInt()
+        val title = if (dark) 0xFFECEFF1.toInt() else 0xFF212121.toInt()
+        val sectionTitle = if (dark) 0xFFECEFF1.toInt() else 0xFF263238.toInt()
+        val label = if (dark) 0xFFB0BEC5.toInt() else 0xFF37474F.toInt()
+        val value = if (dark) 0xFFF5F5F5.toInt() else 0xFF111111.toInt()
+        val note = if (dark) 0xFF90A4AE.toInt() else 0xFF78909C.toInt()
+        val accent = if (dark) 0xFF4DB6AC.toInt() else 0xFF00897B.toInt()
+        private val isDark = dark
+        fun statusText(s: Status) = if (isDark) s.darkText else s.color
+    }
+
+    private lateinit var pal: Palette
+
     private var staticSections: List<Section> = emptyList()
     private val testSections = LinkedHashMap<String, Section>()
 
@@ -58,6 +77,8 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val night = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        pal = Palette(night == Configuration.UI_MODE_NIGHT_YES)
         setContentView(buildLayout())
         runStaticChecks()
     }
@@ -75,7 +96,7 @@ class MainActivity : Activity() {
     private fun buildLayout(): View {
         val scroll = ScrollView(this).apply {
             fitsSystemWindows = true
-            setBackgroundColor(0xFFF3F5F7.toInt())
+            setBackgroundColor(pal.background)
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -87,7 +108,7 @@ class MainActivity : Activity() {
             text = "${Build.MANUFACTURER} ${Build.MODEL}"
             textSize = 22f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(0xFF212121.toInt())
+            setTextColor(pal.title)
         })
         summary = TextView(this).apply {
             text = "チェック中…"
@@ -114,11 +135,11 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             visibility = View.GONE
             setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = cardBg(0xFFFFF8E1.toInt())
+            background = cardBg(pal.progressCard)
         }
-        progressText = TextView(this).apply { textSize = 14f }
+        progressText = TextView(this).apply { textSize = 14f; setTextColor(pal.value) }
         progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100 }
-        spinner = SpinnerView(this)
+        spinner = SpinnerView(this, pal.accent)
         stopButton = Button(this).apply {
             text = "中止"
             setOnClickListener { stopAction?.invoke() }
@@ -134,10 +155,10 @@ class MainActivity : Activity() {
         return scroll
     }
 
-    private fun cardBg(color: Int = Color.WHITE) = GradientDrawable().apply {
+    private fun cardBg(color: Int = pal.card) = GradientDrawable().apply {
         setColor(color)
         cornerRadius = dp(10).toFloat()
-        setStroke(dp(1), 0xFFDDE1E5.toInt())
+        setStroke(dp(1), pal.cardStroke)
     }
 
     private fun badge(s: Status) = TextView(this).apply {
@@ -160,7 +181,7 @@ class MainActivity : Activity() {
             text = sec.title
             textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(0xFF263238.toInt())
+            setTextColor(pal.sectionTitle)
         }, LinearLayout.LayoutParams(0, -2, 1f))
         head.addView(badge(sec.worst()))
         box.addView(head)
@@ -175,21 +196,21 @@ class MainActivity : Activity() {
                 text = item.label
                 textSize = 14f
                 setTypeface(typeface, Typeface.BOLD)
-                setTextColor(0xFF37474F.toInt())
+                setTextColor(pal.label)
             }, LinearLayout.LayoutParams(0, -2, 1f))
             if (item.status != Status.INFO) top.addView(badge(item.status))
             row.addView(top)
             row.addView(TextView(this).apply {
                 text = item.value
                 textSize = 15f
-                setTextColor(0xFF111111.toInt())
+                setTextColor(pal.value)
                 setTextIsSelectable(true)
             })
             item.note?.let {
                 row.addView(TextView(this).apply {
                     text = it
                     textSize = 12f
-                    setTextColor(if (item.status == Status.NG || item.status == Status.WARN) item.status.color else 0xFF78909C.toInt())
+                    setTextColor(if (item.status == Status.NG || item.status == Status.WARN) pal.statusText(item.status) else pal.note)
                 })
             }
             box.addView(row)
@@ -211,7 +232,7 @@ class MainActivity : Activity() {
             warn > 0 -> "偽装の疑いは見つかりませんでした (注意: $warn 件)"
             else -> "偽装の疑いは見つかりませんでした"
         }
-        summary.setTextColor(if (ng > 0) Status.NG.color else if (warn > 0) Status.WARN.color else Status.OK.color)
+        summary.setTextColor(pal.statusText(if (ng > 0) Status.NG else if (warn > 0) Status.WARN else Status.OK))
     }
 
     private fun showProgress(msg: String, pct: Int, indeterminate: Boolean = false, stop: (() -> Unit)?) {
@@ -378,8 +399,8 @@ class MainActivity : Activity() {
     }
 
     /** リフレッシュレート測定中に毎フレーム描き直される回転インジケーター */
-    class SpinnerView(context: Context) : View(context) {
-        private val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF00897B.toInt(); strokeWidth = 6f }
+    class SpinnerView(context: Context, color: Int) : View(context) {
+        private val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color; strokeWidth = 6f }
         override fun onDraw(canvas: Canvas) {
             val a = (SystemClock.uptimeMillis() % 1000) / 1000.0 * 2 * Math.PI
             val cx = width / 2f
