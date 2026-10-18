@@ -31,7 +31,30 @@ GitHub Actions でビルドした APK を使います。
 - 各ブランチのビルド: Actions → 「Build APK」→ Artifacts の `FakeDeviceChecker-apk`
 - `v*` タグを打つと Releases に APK が添付されます
 
-権限は一切要求しません。Android 5.0（API 21）以上に対応しています。
+権限は一切要求しません。
+
+### 署名鍵の設定 (上書きインストール用)
+
+GitHub Secrets に署名鍵を登録すると、すべてのビルドが同じ鍵で署名され、新しい APK を上書きインストールできます。未登録の場合はビルドごとに署名が変わります。
+
+1. 鍵を作る (パスワードは任意。鍵ファイルは安全な場所に保管し、リポジトリには入れない)
+
+   ```sh
+   keytool -genkeypair -keystore signing.keystore -storetype PKCS12 -alias fakecheck \
+     -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=FakeDeviceChecker"
+   base64 -w0 signing.keystore   # macOS は base64 -i signing.keystore
+   ```
+
+2. リポジトリの Settings → Secrets and variables → Actions に登録
+
+   | 名前 | 値 |
+   |---|---|
+   | `SIGNING_KEYSTORE_BASE64` | 上の base64 出力 |
+   | `SIGNING_STORE_PASSWORD` | 鍵ストアのパスワード |
+   | `SIGNING_KEY_ALIAS` | `fakecheck` |
+   | `SIGNING_KEY_PASSWORD` | 鍵のパスワード (PKCS12 なら鍵ストアと同じ。省略可) |
+
+登録前のビルドを入れている場合だけ、一度アンインストールしてから入れ直してください。Android 5.0（API 21）以上に対応しています。
 
 ## 実測テストの注意
 
