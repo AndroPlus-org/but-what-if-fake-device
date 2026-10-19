@@ -21,6 +21,8 @@ class MemTestRunner(
     private val ctx: Context,
     private val onProgress: (String, Int) -> Unit,
     private val onDone: (Section) -> Unit,
+    /** Shizuku 接続時に、zram がストレージへ書き出した量 (RAM拡張) を返す */
+    private val zramWriteback: (() -> Long)? = null,
 ) {
     private val handler = Handler(Looper.getMainLooper())
     private val progressFile = File(ctx.filesDir, MemTestService.PROGRESS_FILE)
@@ -51,7 +53,7 @@ class MemTestRunner(
         total = (mi["MemTotal"] ?: 0) * 1024
         avail0 = (mi["MemAvailable"] ?: mi["MemFree"] ?: 0) * 1024
         swapTotal = (mi["SwapTotal"] ?: 0) * 1024
-        diskSwap0 = Sys.diskSwapUsedBytes()
+        diskSwap0 = overflowBytes()
         peakAlloc = 0; peakSwapDelta = 0; minAvail = Long.MAX_VALUE
         progressFile.delete()
 
@@ -64,6 +66,9 @@ class MemTestRunner(
         startedAt = SystemClock.elapsedRealtime()
         handler.post(poll)
     }
+
+    /** 物理RAMの外 (ストレージ) に置かれているメモリ量 */
+    private fun overflowBytes(): Long = Sys.diskSwapUsedBytes() + (zramWriteback?.invoke() ?: 0L)
 
     fun stop() {
         if (running) finish("USER")
@@ -80,7 +85,7 @@ class MemTestRunner(
             val mi = Sys.meminfo()
             val avail = (mi["MemAvailable"] ?: 0) * 1024
             minAvail = minOf(minAvail, avail)
-            peakSwapDelta = max(peakSwapDelta, Sys.diskSwapUsedBytes() - diskSwap0)
+            peakSwapDelta = max(peakSwapDelta, overflowBytes() - diskSwap0)
 
             onProgress(
                 ctx.getString(R.string.memt_progress, Sys.gb(peakAlloc), Sys.gb(avail)) +

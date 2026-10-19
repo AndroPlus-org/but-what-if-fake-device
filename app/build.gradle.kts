@@ -9,7 +9,8 @@ android {
 
     defaultConfig {
         applicationId = "jp.androplus.fakecheck"
-        minSdk = 21
+        // Shizuku ライブラリの要件
+        minSdk = 24
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
@@ -46,4 +47,10 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+}
+
+dependencies {
+    // shell 権限での追加チェック用 (Shizuku が無い端末では使われない)
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
 }

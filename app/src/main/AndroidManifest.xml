@@ -25,6 +25,15 @@
             android:exported="false"
             android:theme="@style/FullscreenTheme" />
 
+        <!-- Shizuku から binder を受け取るためのプロバイダ -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
         <!-- RAM実測テストはメインUIを巻き込まないよう別プロセスで実行する -->
         <service
             android:name=".MemTestService"
