@@ -80,7 +80,7 @@ class StorageTest(
             val section = try {
                 runTest(targetBytes)
             } catch (t: Throwable) {
-                Section("ストレージ実書き込みテスト結果", listOf(Item("エラー", t.toString(), Status.WARN)))
+                Section(ctx.getString(R.string.st_section), listOf(Item(ctx.getString(R.string.common_error), t.toString(), Status.WARN)))
             } finally {
                 synchronized(StorageTest::class.java) { activeTests-- }
                 cleanup(ctx)
@@ -114,7 +114,7 @@ class StorageTest(
         val freeBefore = freeBytes()
         val target = (minOf(targetBytes, maxTarget()) / BLOCK) * BLOCK
         if (target < BLOCK * 16L) {
-            return Section("ストレージ実書き込みテスト結果", listOf(Item("エラー", "空き容量が足りません", Status.WARN)))
+            return Section(ctx.getString(R.string.st_section), listOf(Item(ctx.getString(R.string.common_error), ctx.getString(R.string.not_enough_space), Status.WARN)))
         }
 
         val buf = ByteBuffer.allocateDirect(BLOCK).order(ByteOrder.LITTLE_ENDIAN)
@@ -145,7 +145,7 @@ class StorageTest(
                         if (now - lastPost > 300) {
                             lastPost = now
                             val speed = written / 1048576.0 / ((now - t0) / 1000.0).coerceAtLeast(0.001)
-                            post("書き込み中… ${Sys.gb(written)} / ${Sys.gb(target)}  (${Sys.f1(speed)} MB/s)", (written * 50 / target).toInt())
+                            post(ctx.getString(R.string.st_writing, Sys.gb(written), Sys.gb(target), Sys.f1(speed)), (written * 50 / target).toInt())
                         }
                     }
                     // キャッシュではなくストレージ本体に書かせる
@@ -199,7 +199,7 @@ class StorageTest(
                             lastPost = now
                             val done = readOffset + pos
                             val speed = done / 1048576.0 / ((now - t1) / 1000.0).coerceAtLeast(0.001)
-                            post("照合中… ${Sys.gb(done)} / ${Sys.gb(written)}  (${Sys.f1(speed)} MB/s)  破損 ${Sys.mb(badBytes)}", 50 + (done * 50 / written.coerceAtLeast(1)).toInt())
+                            post(ctx.getString(R.string.st_verifying, Sys.gb(done), Sys.gb(written), Sys.f1(speed), Sys.mb(badBytes)), 50 + (done * 50 / written.coerceAtLeast(1)).toInt())
                         }
                     }
                 }
@@ -213,50 +213,49 @@ class StorageTest(
 
         // ---- 結果 ----
         val items = ArrayList<Item>()
-        items += Item("テスト前の空き容量", Sys.gb(freeBefore))
+        items += Item(ctx.getString(R.string.st_free_before_label), Sys.gb(freeBefore))
         items += Item(
-            "書き込んだ量",
-            Sys.gb(written) + if (cancel) " (中断)" else "",
+            ctx.getString(R.string.st_written_label),
+            Sys.gb(written) + if (cancel) " " + ctx.getString(R.string.st_interrupted) else "",
             if (writeError != null) Status.WARN else Status.INFO,
-            writeError?.let { "書き込み中にエラー: $it" }
+            writeError?.let { ctx.getString(R.string.st_write_error, it) }
         )
         val consumed = freeBefore - freeAfterWrite
         if (written > 1L shl 30 && consumed < written / 4) {
             items += Item(
-                "空き容量の減り方",
-                "書き込み ${Sys.gb(written)} に対し空きは ${Sys.gb(consumed)} しか減っていない",
+                ctx.getString(R.string.st_free_drop_label),
+                ctx.getString(R.string.st_free_drop_value, Sys.gb(written), Sys.gb(consumed)),
                 Status.WARN,
-                "書いたデータが保存されていない可能性があります。ただし空き容量が減るとシステムが他アプリのキャッシュを削除するため、正常な端末でも起こることがあります。破損データの有無で判断してください。"
+                ctx.getString(R.string.st_free_drop_note)
             )
         }
-        items += Item("照合OK", Sys.gb(verified) + if (cancelVerify) " (照合を中断)" else "")
+        items += Item(ctx.getString(R.string.st_verified_label), Sys.gb(verified) + if (cancelVerify) " " + ctx.getString(R.string.st_verify_interrupted) else "")
         items += if (badBytes > 0) {
             Item(
-                "破損データ",
-                "${Sys.gb(badBytes)} (最初の破損位置 ${Sys.gb(firstBad)} 付近)",
+                ctx.getString(R.string.st_bad_label),
+                ctx.getString(R.string.st_bad_value, Sys.gb(badBytes), Sys.gb(firstBad)),
                 Status.NG,
-                "書き込んだデータが正しく読み戻せませんでした。表示容量が実際より大きい「容量偽装」か、ストレージの故障の疑いが強いです。" +
-                    "最初の破損位置あたりが実際の書き込み可能容量の目安です。"
+                ctx.getString(R.string.st_bad_note)
             )
         } else if (written > 0) {
             Item(
-                "破損データ",
-                "なし",
+                ctx.getString(R.string.st_bad_label),
+                ctx.getString(R.string.common_none),
                 Status.OK,
-                if (cancel || cancelVerify) "途中までの範囲では問題ありません。全容量を確認するには最後まで実行してください。"
-                else "書き込んだ ${Sys.gb(written)} 分はすべて正しく保存されていました。"
+                if (cancel || cancelVerify) ctx.getString(R.string.st_partial_note)
+                else ctx.getString(R.string.st_all_ok_note, Sys.gb(written))
             )
         } else {
-            Item("破損データ", "照合データなし", Status.INFO)
+            Item(ctx.getString(R.string.st_bad_label), ctx.getString(R.string.st_no_data), Status.INFO)
         }
-        items += Item("書き込み速度", "${Sys.f1(written / 1048576.0 / (writeMs / 1000.0))} MB/s")
+        items += Item(ctx.getString(R.string.st_write_speed_label), "${Sys.f1(written / 1048576.0 / (writeMs / 1000.0))} MB/s")
         items += Item(
-            "読み込み速度",
+            ctx.getString(R.string.st_read_speed_label),
             "${Sys.f1((verified + badBytes) / 1048576.0 / (readMs / 1000.0))} MB/s",
             Status.INFO,
-            "書き込み量が少ない場合はRAMキャッシュから読むため実際より速く出ます。"
+            ctx.getString(R.string.st_read_speed_note)
         )
-        items += Item("後片付け", "テスト用ファイルは削除しました")
-        return Section("ストレージ実書き込みテスト結果", items)
+        items += Item(ctx.getString(R.string.st_cleanup_label), ctx.getString(R.string.st_cleanup_value))
+        return Section(ctx.getString(R.string.st_section), items)
     }
 }

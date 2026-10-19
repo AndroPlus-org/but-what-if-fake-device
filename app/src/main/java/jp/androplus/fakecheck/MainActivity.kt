@@ -113,24 +113,24 @@ class MainActivity : Activity() {
             setTextColor(pal.title)
         })
         summary = TextView(this).apply {
-            text = "チェック中…"
+            text = getString(R.string.checking)
             textSize = 15f
             setPadding(0, dp(4), 0, dp(8))
         }
         root.addView(summary)
 
         val buttons = FlowLayout(this, dp(6))
-        fun btn(label: String, onClick: () -> Unit) = buttons.addView(Button(this).apply {
-            text = label
+        fun btn(label: Int, onClick: () -> Unit) = buttons.addView(Button(this).apply {
+            setText(label)
             isAllCaps = false
             setOnClickListener { onClick() }
         })
-        btn("RAM実測テスト") { confirmMemTest() }
-        btn("ストレージ実書き込みテスト") { chooseStorageTarget() }
-        btn("リフレッシュレート実測") { measureRefresh() }
-        btn("ディスプレイ表示テスト") { startActivity(Intent(this, DisplayTestActivity::class.java)) }
-        btn("結果を共有") { share() }
-        btn("再チェック") { runStaticChecks() }
+        btn(R.string.mem_test) { confirmMemTest() }
+        btn(R.string.storage_test) { chooseStorageTarget() }
+        btn(R.string.btn_refresh) { measureRefresh() }
+        btn(R.string.btn_display_test) { startActivity(Intent(this, DisplayTestActivity::class.java)) }
+        btn(R.string.btn_share) { share() }
+        btn(R.string.btn_recheck) { runStaticChecks() }
         root.addView(buttons)
 
         progressBox = LinearLayout(this).apply {
@@ -143,7 +143,7 @@ class MainActivity : Activity() {
         progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100 }
         spinner = SpinnerView(this, pal.accent)
         stopButton = Button(this).apply {
-            text = "中止"
+            setText(R.string.stop)
             setOnClickListener { stopAction?.invoke() }
         }
         progressBox.addView(progressText)
@@ -164,7 +164,7 @@ class MainActivity : Activity() {
     }
 
     private fun badge(s: Status) = TextView(this).apply {
-        text = s.label
+        setText(s.label)
         textSize = 12f
         setTextColor(Color.WHITE)
         setTypeface(typeface, Typeface.BOLD)
@@ -229,10 +229,10 @@ class MainActivity : Activity() {
         val ng = all.sumOf { s -> s.items.count { it.status == Status.NG } }
         val warn = all.sumOf { s -> s.items.count { it.status == Status.WARN } }
         summary.text = when {
-            staticSections.isEmpty() -> "チェック中…"
-            ng > 0 -> "偽装の疑いがある項目: $ng 件 / 注意: $warn 件"
-            warn > 0 -> "偽装の疑いは見つかりませんでした (注意: $warn 件)"
-            else -> "偽装の疑いは見つかりませんでした"
+            staticSections.isEmpty() -> getString(R.string.checking)
+            ng > 0 -> getString(R.string.summary_ng, ng.toString(), warn.toString())
+            warn > 0 -> getString(R.string.summary_warn, warn.toString())
+            else -> getString(R.string.summary_ok)
         }
         summary.setTextColor(pal.statusText(if (ng > 0) Status.NG else if (warn > 0) Status.WARN else Status.OK))
     }
@@ -255,7 +255,7 @@ class MainActivity : Activity() {
 
     private fun busy(): Boolean {
         if (memTest?.isRunning == true || storageTest?.isRunning == true || progressBox.visibility == View.VISIBLE) {
-            Toast.makeText(this, "別のテストを実行中です", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.busy, Toast.LENGTH_SHORT).show()
             return true
         }
         return false
@@ -272,8 +272,8 @@ class MainActivity : Activity() {
                 { MemoryCheck.run(app) },
                 { StorageCheck.run(app) },
                 { DisplayCheck.run(this) },
-                { SocCheck.run() },
-                { OsCheck.run() },
+                { SocCheck.run(app) },
+                { OsCheck.run(app) },
                 { CameraCheck.run(app) },
                 { BatteryCheck.run(app) },
                 { FeatureCheck.run(app) },
@@ -281,7 +281,7 @@ class MainActivity : Activity() {
                 try {
                     f()
                 } catch (t: Throwable) {
-                    Section("エラー", listOf(Item("チェック失敗", t.toString(), Status.WARN)))
+                    Section(getString(R.string.common_error), listOf(Item(getString(R.string.check_failed), t.toString(), Status.WARN)))
                 }
             }
             handler.post {
@@ -296,15 +296,10 @@ class MainActivity : Activity() {
     private fun confirmMemTest() {
         if (busy()) return
         AlertDialog.Builder(this)
-            .setTitle("RAM実測テスト")
-            .setMessage(
-                "別プロセスで物理メモリをいっぱいまで確保して、実際に使えるRAM量を測ります。\n\n" +
-                    "・他のアプリは強制終了されることがあります\n" +
-                    "・テスト中は端末が一時的に重くなります\n" +
-                    "・再起動直後に実行すると精度が上がります"
-            )
-            .setPositiveButton("開始") { _, _ -> startMemTest() }
-            .setNegativeButton("キャンセル", null)
+            .setTitle(R.string.mem_test)
+            .setMessage(R.string.mem_test_message)
+            .setPositiveButton(R.string.start) { _, _ -> startMemTest() }
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -320,7 +315,7 @@ class MainActivity : Activity() {
             }
         )
         memTest = runner
-        showProgress("RAM実測テストを開始…", 0, stop = { runner.stop() })
+        showProgress(getString(R.string.mem_test_starting), 0, stop = { runner.stop() })
         runner.start()
     }
 
@@ -339,32 +334,27 @@ class MainActivity : Activity() {
         )
         val max = test.maxTarget()
         if (max < 64L shl 20) {
-            Toast.makeText(this, "空き容量が足りません", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, R.string.not_enough_space, Toast.LENGTH_LONG).show()
             return
         }
         val options = listOf(
-            "空き容量すべて ${Sys.gb(max)} (推奨・時間がかかります)" to max,
-            "空き容量の半分 ${Sys.gb(max / 2)}" to max / 2,
-            "クイック 4GB" to minOf(max, 4L shl 30),
+            getString(R.string.storage_opt_all, Sys.gb(max)) to max,
+            getString(R.string.storage_opt_half, Sys.gb(max / 2)) to max / 2,
+            getString(R.string.storage_opt_quick) to minOf(max, 4L shl 30),
         )
         AlertDialog.Builder(this)
-            .setTitle("書き込む量")
+            .setTitle(R.string.storage_amount_title)
             .setItems(options.map { it.first }.toTypedArray()) { _, which ->
                 AlertDialog.Builder(this)
-                    .setTitle("ストレージ実書き込みテスト")
-                    .setMessage(
-                        "${Sys.gb(options[which].second)} のテストデータを書き込み、すべて読み戻して照合します。\n\n" +
-                            "・既存のデータは消えません (このアプリ専用フォルダに書き、終了後に削除)\n" +
-                            "・容量偽装を確実に見つけるには「空き容量すべて」で実行してください\n" +
-                            "・中止すると、そこまでに書いた分だけ照合します"
-                    )
-                    .setPositiveButton("開始") { _, _ ->
+                    .setTitle(R.string.storage_test)
+                    .setMessage(getString(R.string.storage_test_message, Sys.gb(options[which].second)))
+                    .setPositiveButton(R.string.start) { _, _ ->
                         storageTest = test
                         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                        showProgress("ストレージテストを開始…", 0, stop = { test.stop() })
+                        showProgress(getString(R.string.storage_test_starting), 0, stop = { test.stop() })
                         test.start(options[which].second)
                     }
-                    .setNegativeButton("キャンセル", null)
+                    .setNegativeButton(R.string.cancel, null)
                     .show()
             }
             .show()
@@ -374,7 +364,7 @@ class MainActivity : Activity() {
 
     private fun measureRefresh() {
         if (busy()) return
-        showProgress("リフレッシュレートを測定中… (約4秒、画面に触れないでください)", 0, indeterminate = true, stop = null)
+        showProgress(getString(R.string.refresh_measuring), 0, indeterminate = true, stop = null)
         spinner.visibility = View.VISIBLE
         RefreshRateMeter(this, spinner) { sec ->
             hideProgress()
@@ -388,16 +378,16 @@ class MainActivity : Activity() {
     private fun share() {
         val date = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date())
         val text = buildString {
-            append("偽装スペックチェッカー レポート ($date)\n")
+            append(getString(R.string.report_header, date)).append('\n')
             append("${Build.MANUFACTURER} ${Build.MODEL}\n")
             append(summary.text).append("\n\n")
-            (testSections.values + staticSections).forEach { append(it.toText()).append('\n') }
+            (testSections.values + staticSections).forEach { append(it.toText(this@MainActivity)).append('\n') }
         }
         startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "スペックチェック: ${Build.MODEL}")
+            putExtra(Intent.EXTRA_SUBJECT, getString(R.string.share_subject, Build.MODEL))
             putExtra(Intent.EXTRA_TEXT, text)
-        }, "結果を共有"))
+        }, getString(R.string.btn_share)))
     }
 
     /** リフレッシュレート測定中に毎フレーム描き直される回転インジケーター */

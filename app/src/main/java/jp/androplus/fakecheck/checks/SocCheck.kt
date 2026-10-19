@@ -1,10 +1,12 @@
 package jp.androplus.fakecheck.checks
 
+import android.content.Context
 import android.opengl.EGL14
 import android.opengl.EGLConfig
 import android.opengl.GLES20
 import android.os.Build
 import jp.androplus.fakecheck.Item
+import jp.androplus.fakecheck.R
 import jp.androplus.fakecheck.Section
 import jp.androplus.fakecheck.Status
 import jp.androplus.fakecheck.Sys
@@ -26,7 +28,7 @@ object SocCheck {
 
     data class Gpu(val vendor: String, val renderer: String, val version: String)
 
-    fun run(): Section {
+    fun run(ctx: Context): Section {
         val items = ArrayList<Item>()
 
         val claims = linkedMapOf<String, String>()
@@ -41,18 +43,21 @@ object SocCheck {
         }
         val cpuinfo = Sys.read("/proc/cpuinfo").orEmpty()
         Regex("(?im)^Hardware\\s*:\\s*(.+)$").find(cpuinfo)?.let { claims["/proc/cpuinfo Hardware"] = it.groupValues[1].trim() }
-        items += Item("SoC 識別情報", claims.entries.joinToString("\n") { "${it.key} = ${it.value}" })
+        items += Item(ctx.getString(R.string.soc_id_label), claims.entries.joinToString("\n") { "${it.key} = ${it.value}" })
 
         // コア構成
-        val cores = cpuCores(cpuinfo)
+        val cores = cpuCores(cpuinfo, ctx.getString(R.string.soc_unknown_core))
         if (cores.isNotEmpty()) {
             val grouped = cores.groupBy { it.first to it.second }
                 .entries.sortedByDescending { it.key.second }
-                .joinToString("\n") { (k, v) -> "${k.first} × ${v.size}  最大 ${if (k.second > 0) Sys.f2(k.second / 1e6) + " GHz" else "不明"}" }
-            items += Item("CPU コア構成 (実測)", "${cores.size} コア\n$grouped", Status.INFO,
-                "カーネルが認識している実際のコア。仕様表のコア数・コア種類・クロックと比べてください。")
+                .joinToString("\n") { (k, v) ->
+                    ctx.getString(R.string.soc_core_line, k.first, v.size.toString(),
+                        if (k.second > 0) Sys.f2(k.second / 1e6) + " GHz" else ctx.getString(R.string.common_unknown))
+                }
+            items += Item(ctx.getString(R.string.soc_cores_label), ctx.getString(R.string.soc_cores_value, cores.size.toString(), grouped), Status.INFO,
+                ctx.getString(R.string.soc_cores_note))
         } else {
-            items += Item("CPU コア数", "${Runtime.getRuntime().availableProcessors()} (詳細読み取り不可)")
+            items += Item(ctx.getString(R.string.soc_count_label), ctx.getString(R.string.soc_count_value, Runtime.getRuntime().availableProcessors().toString()))
         }
         items += Item("CPU ABI", Build.SUPPORTED_ABIS.joinToString(", "))
 
@@ -61,7 +66,7 @@ object SocCheck {
         if (gpu != null) {
             items += Item("GPU (OpenGL ES)", "${gpu.renderer}\n${gpu.vendor} / ${gpu.version}")
         } else {
-            items += Item("GPU (OpenGL ES)", "取得失敗")
+            items += Item("GPU (OpenGL ES)", ctx.getString(R.string.common_failed_plain))
         }
 
         // 整合性チェック: 名乗っている SoC ベンダーと GPU が合っているか
@@ -81,13 +86,13 @@ object SocCheck {
         )
         if (vendors.size >= 2) {
             items += Item(
-                "SoC 識別情報の一貫性",
-                "複数ベンダーが混在: ${vendors.joinToString(" / ")}",
+                ctx.getString(R.string.soc_consistency_label),
+                ctx.getString(R.string.soc_mixed, vendors.joinToString(" / ")),
                 Status.WARN,
-                "識別情報の一部だけが書き換えられている可能性があります。cpuinfo / ro.board.platform などカーネル・ベンダー由来の値の方が信頼できます。"
+                ctx.getString(R.string.soc_mixed_note)
             )
         } else if (vendors.size == 1) {
-            items += Item("SoC 識別情報の一貫性", "${vendors[0]} で一貫", Status.OK)
+            items += Item(ctx.getString(R.string.soc_consistency_label), ctx.getString(R.string.soc_consistent_vendor, vendors[0]), Status.OK)
         }
 
         if (gpu != null) {
@@ -103,24 +108,24 @@ object SocCheck {
                 else -> null
             }
             when (gpuOk) {
-                true -> items += Item("SoC と GPU の整合性", "矛盾なし", Status.OK)
+                true -> items += Item(ctx.getString(R.string.soc_gpu_match_label), ctx.getString(R.string.common_consistent), Status.OK)
                 false -> items += Item(
-                    "SoC と GPU の整合性",
-                    "名乗っている SoC と GPU (${gpu.renderer}) が合いません",
+                    ctx.getString(R.string.soc_gpu_match_label),
+                    ctx.getString(R.string.soc_gpu_mismatch, gpu.renderer),
                     Status.NG,
-                    "例: Snapdragon を名乗っているのに GPU が Adreno 以外。SoC 名が偽装されている可能性が高いです。"
+                    ctx.getString(R.string.soc_gpu_mismatch_note)
                 )
                 null -> {}
             }
             if (r.contains("swiftshader") || r.contains("llvmpipe") || r.contains("android emulator")) {
-                items += Item("GPU 種別", "ソフトウェアレンダラ / エミュレータ", Status.WARN)
+                items += Item(ctx.getString(R.string.soc_gpu_type_label), ctx.getString(R.string.soc_gpu_software), Status.WARN)
             }
         }
-        return Section("CPU / SoC / GPU", items)
+        return Section(ctx.getString(R.string.soc_section), items)
     }
 
     /** (コア名, 最大周波数kHz) のリスト */
-    private fun cpuCores(cpuinfo: String): List<Pair<String, Long>> {
+    private fun cpuCores(cpuinfo: String, unknownCore: String): List<Pair<String, Long>> {
         val parts = HashMap<Int, String>()
         var cur = -1
         var impl = 0
@@ -144,7 +149,7 @@ object SocCheck {
         if (count == 0) return emptyList()
         return (0 until count).map { i ->
             val freq = Sys.readLong("/sys/devices/system/cpu/cpu$i/cpufreq/cpuinfo_max_freq") ?: 0L
-            (parts[i] ?: "不明なコア") to freq
+            (parts[i] ?: unknownCore) to freq
         }
     }
 

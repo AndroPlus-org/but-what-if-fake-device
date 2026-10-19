@@ -1,5 +1,6 @@
 package jp.androplus.fakecheck
 
+import android.content.Context
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -65,7 +66,7 @@ object Sys {
     }
 
     fun gb(bytes: Long): String = String.format(Locale.US, "%.2f GB", bytes / 1073741824.0)
-    fun gbDec(bytes: Long): String = String.format(Locale.US, "%.1f GB(10進)", bytes / 1e9)
+    fun gbDec(ctx: Context, bytes: Long): String = ctx.getString(R.string.gb_dec, String.format(Locale.US, "%.1f", bytes / 1e9))
     fun mb(bytes: Long): String = String.format(Locale.US, "%.0f MB", bytes / 1048576.0)
     fun f1(v: Double): String = String.format(Locale.US, "%.1f", v)
     fun f2(v: Double): String = String.format(Locale.US, "%.2f", v)

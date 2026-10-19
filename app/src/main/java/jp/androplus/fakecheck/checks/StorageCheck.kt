@@ -7,6 +7,7 @@ import android.os.Environment
 import android.os.StatFs
 import android.os.storage.StorageManager
 import jp.androplus.fakecheck.Item
+import jp.androplus.fakecheck.R
 import jp.androplus.fakecheck.Section
 import jp.androplus.fakecheck.Status
 import jp.androplus.fakecheck.Sys
@@ -23,10 +24,10 @@ object StorageCheck {
         val dataTotal = data.blockCountLong * data.blockSizeLong
         val dataFree = data.availableBlocksLong * data.blockSizeLong
         items += Item(
-            "データ領域 (/data, statfs)",
-            "合計 ${Sys.gb(dataTotal)} / 空き ${Sys.gb(dataFree)}",
+            ctx.getString(R.string.sto_data_label),
+            ctx.getString(R.string.sto_data_value, Sys.gb(dataTotal), Sys.gb(dataFree)),
             Status.INFO,
-            "ユーザーが使える領域。OS領域を含まないので公称容量より小さくなります。"
+            ctx.getString(R.string.sto_data_note)
         )
 
         var advertised = 0L
@@ -35,13 +36,13 @@ object StorageCheck {
                 val ssm = ctx.getSystemService(StorageStatsManager::class.java)!!
                 advertised = ssm.getTotalBytes(StorageManager.UUID_DEFAULT)
                 items += Item(
-                    "内部ストレージ容量 (設定アプリ表示値)",
-                    "${Sys.gbDec(advertised)} = ${Sys.gb(advertised)}",
+                    ctx.getString(R.string.sto_adv_label),
+                    "${Sys.gbDec(ctx, advertised)} = ${Sys.gb(advertised)}",
                     Status.INFO,
-                    "Android が「設定」に表示する公称容量 (2の累乗に丸めた値)。"
+                    ctx.getString(R.string.sto_adv_note)
                 )
             } catch (e: Exception) {
-                items += Item("内部ストレージ容量 (設定アプリ表示値)", "取得失敗: ${e.javaClass.simpleName}", Status.WARN)
+                items += Item(ctx.getString(R.string.sto_adv_label), ctx.getString(R.string.common_failed, e.javaClass.simpleName), Status.WARN)
             }
         }
 
@@ -53,10 +54,10 @@ object StorageCheck {
                 else -> Status.OK
             }
             items += Item(
-                "公称容量とデータ領域の比率",
-                "${Sys.f2(ratio)} 倍",
+                ctx.getString(R.string.sto_ratio_label),
+                ctx.getString(R.string.sto_ratio_value, Sys.f2(ratio)),
                 st,
-                "通常は 1.1〜2.0 倍程度 (OS領域ぶんの差)。極端に大きい場合、表示容量だけが水増しされている疑いがあります。"
+                ctx.getString(R.string.sto_ratio_note)
             )
         }
 
@@ -65,37 +66,37 @@ object StorageCheck {
             // UFS は複数の LU(sda, sdb...) に分かれるので合計で比較する
             val diskTotal = devs.sumOf { it.bytes }
             items += Item(
-                "ストレージ物理デバイス (カーネル)",
-                devs.joinToString("\n") { "${it.name}: ${Sys.gbDec(it.bytes)}${if (it.detail.isNotEmpty()) "  ${it.detail}" else ""}" },
+                ctx.getString(R.string.sto_dev_label),
+                devs.joinToString("\n") { "${it.name}: ${Sys.gbDec(ctx, it.bytes)}${if (it.detail.isNotEmpty()) "  ${it.detail}" else ""}" },
                 Status.INFO
             )
             if (advertised > 0) {
                 val r = advertised.toDouble() / diskTotal
                 items += if (r > 1.3) {
                     Item(
-                        "公称容量と物理デバイス容量",
-                        "公称 ${Sys.gbDec(advertised)} > 物理 ${Sys.gbDec(diskTotal)}",
+                        ctx.getString(R.string.sto_phys_label),
+                        ctx.getString(R.string.sto_phys_bad, Sys.gbDec(ctx, advertised), Sys.gbDec(ctx, diskTotal)),
                         Status.NG,
-                        "物理デバイスより大きい容量が表示されています。容量偽装の可能性が高いです。"
+                        ctx.getString(R.string.sto_phys_bad_note)
                     )
                 } else {
-                    Item("公称容量と物理デバイス容量", "矛盾なし", Status.OK)
+                    Item(ctx.getString(R.string.sto_phys_label), ctx.getString(R.string.common_consistent), Status.OK)
                 }
             }
         } else {
             items += Item(
-                "ストレージ物理デバイス (カーネル)",
-                "読み取り不可 (新しいAndroidでは制限されています)",
+                ctx.getString(R.string.sto_dev_label),
+                ctx.getString(R.string.sto_dev_unreadable),
                 Status.INFO
             )
         }
 
         items += Item(
-            "実書き込みテスト",
-            "下の「ストレージ実書き込みテスト」で、空き容量に実際にデータを書いて読み戻して確認できます。偽装容量は書き込んだデータが壊れることで検出できます。",
+            ctx.getString(R.string.sto_write_label),
+            ctx.getString(R.string.sto_write_value),
             Status.INFO
         )
-        return Section("ストレージ", items)
+        return Section(ctx.getString(R.string.sto_section), items)
     }
 
     private fun blockDevices(): List<BlockDev> {

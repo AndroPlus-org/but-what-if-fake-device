@@ -1,7 +1,9 @@
 package jp.androplus.fakecheck.checks
 
+import android.content.Context
 import android.os.Build
 import jp.androplus.fakecheck.Item
+import jp.androplus.fakecheck.R
 import jp.androplus.fakecheck.Section
 import jp.androplus.fakecheck.Status
 import jp.androplus.fakecheck.Sys
@@ -49,23 +51,23 @@ object OsCheck {
         return RELEASE_TO_SDK[mm]
     }
 
-    fun run(): Section {
+    fun run(ctx: Context): Section {
         val items = ArrayList<Item>()
         val sdk = Build.VERSION.SDK_INT
         val release = Build.VERSION.RELEASE
-        items += Item("Android バージョン (表示値)", "Android $release")
-        items += Item("API レベル (SDK_INT)", sdk.toString())
+        items += Item(ctx.getString(R.string.os_version_label), "Android $release")
+        items += Item(ctx.getString(R.string.os_sdk_label), sdk.toString())
 
         val exp = expectedSdk(release)
         if (exp != null) {
             items += if (sdk in exp) {
-                Item("バージョンとAPIレベルの整合性", "整合", Status.OK)
+                Item(ctx.getString(R.string.os_consistency_label), ctx.getString(R.string.os_consistent), Status.OK)
             } else {
                 Item(
-                    "バージョンとAPIレベルの整合性",
-                    "Android $release なら API ${exp.first} のはずが API $sdk",
+                    ctx.getString(R.string.os_consistency_label),
+                    ctx.getString(R.string.os_inconsistent, release, exp.first.toString(), sdk.toString()),
                     Status.NG,
-                    "表示上の Android バージョンだけが書き換えられている可能性が高いです (実際は API $sdk = ${sdkName(sdk)})。"
+                    ctx.getString(R.string.os_inconsistent_note, sdk.toString(), sdkName(sdk))
                 )
             }
         }
@@ -80,42 +82,42 @@ object OsCheck {
         }
         if (maxCode != null) {
             items += Item(
-                "フレームワーク実体のバージョン",
-                "API $maxCode (${sdkName(maxCode)}) まで定義",
+                ctx.getString(R.string.os_fw_label),
+                ctx.getString(R.string.os_fw_value, maxCode.toString(), sdkName(maxCode)),
                 if (maxCode < sdk) Status.NG else Status.OK,
-                if (maxCode < sdk) "OS本体は API $maxCode なのに API $sdk を名乗っています。OSバージョン偽装の疑いがあります。" else null
+                if (maxCode < sdk) ctx.getString(R.string.os_fw_note, maxCode.toString(), sdk.toString()) else null
             )
         }
 
         val missing = MARKER_CLASSES.filter { (level, cls) -> level <= sdk && !classExists(cls) }
         items += if (missing.isEmpty()) {
-            Item("API レベル固有機能の存在確認", "API ${MARKER_CLASSES.last { it.first <= sdk }.first} までの機能を確認", Status.OK)
+            Item(ctx.getString(R.string.os_marker_label), ctx.getString(R.string.os_marker_ok, MARKER_CLASSES.last { it.first <= sdk }.first.toString()), Status.OK)
         } else {
             val realLevel = MARKER_CLASSES.lastOrNull { (_, cls) -> classExists(cls) }?.first
             // 最上位の1つだけ欠けている場合はOEMの独自ビルドの可能性もあるので「注意」に留める
             val topLevel = MARKER_CLASSES.last { it.first <= sdk }.first
             val onlyTop = missing.size == 1 && missing[0].first == topLevel
             Item(
-                "API レベル固有機能の存在確認",
-                "不足: " + missing.joinToString { "API${it.first}" },
+                ctx.getString(R.string.os_marker_label),
+                ctx.getString(R.string.os_marker_missing, missing.joinToString { "API${it.first}" }),
                 if (onlyTop) Status.WARN else Status.NG,
-                "名乗っている API $sdk に必要な機能がありません。実際は API ${realLevel ?: "?"} 程度の OS と推定されます。"
+                ctx.getString(R.string.os_marker_note, sdk.toString(), realLevel?.toString() ?: "?")
             )
         }
 
-        items += Item("セキュリティパッチ", if (Build.VERSION.SDK_INT >= 23) Build.VERSION.SECURITY_PATCH else "不明")
-        items += Item("カーネル", Sys.read("/proc/version") ?: System.getProperty("os.version").orEmpty())
+        items += Item(ctx.getString(R.string.os_patch_label), if (Build.VERSION.SDK_INT >= 23) Build.VERSION.SECURITY_PATCH else ctx.getString(R.string.common_unknown))
+        items += Item(ctx.getString(R.string.os_kernel_label), Sys.read("/proc/version") ?: System.getProperty("os.version").orEmpty())
 
         val vendorRelease = Sys.prop("ro.vendor.build.version.release")
         val vendorSdk = Sys.prop("ro.vendor.build.version.sdk")
         val firstApi = Sys.prop("ro.product.first_api_level").ifEmpty { Sys.prop("ro.board.first_api_level") }
         val extra = listOfNotNull(
             vendorRelease.takeIf { it.isNotEmpty() }?.let { "vendor: Android $it" + (vendorSdk.takeIf { s -> s.isNotEmpty() }?.let { s -> " (API $s)" } ?: "") },
-            firstApi.takeIf { it.isNotEmpty() }?.let { "初期搭載 API: $it" },
+            firstApi.takeIf { it.isNotEmpty() }?.let { ctx.getString(R.string.os_first_api, it) },
         )
         if (extra.isNotEmpty()) {
-            items += Item("ベンダー領域のバージョン", extra.joinToString("\n"), Status.INFO,
-                "ベンダー領域は OS 本体より古いことがありますが、system 側と大きく離れている場合は参考にしてください。")
+            items += Item(ctx.getString(R.string.os_vendor_label), extra.joinToString("\n"), Status.INFO,
+                ctx.getString(R.string.os_vendor_note))
         }
 
         // 型番・ブランドの書き換えチェック: 表示用の値だけ書き換えて vendor/odm 側が元のまま、という例が多い。
@@ -137,19 +139,18 @@ object OsCheck {
                 .distinct()
             if (distinct.size > 1) diffs += f
         }
-        items += Item("端末", "${Build.MANUFACTURER} ${Build.MODEL} (${Build.BRAND} / ${Build.DEVICE})")
+        items += Item(ctx.getString(R.string.os_device_label), "${Build.MANUFACTURER} ${Build.MODEL} (${Build.BRAND} / ${Build.DEVICE})")
         if (table.isNotEmpty()) {
             items += Item(
-                "パーティション別の型番情報",
+                ctx.getString(R.string.os_partitions_label),
                 table.toString().trim(),
                 if (diffs.isEmpty()) Status.INFO else Status.WARN,
                 if (diffs.isEmpty()) null
-                else "${diffs.joinToString()} がパーティションごとに異なります。OEM品の再ブランドで正常な場合もありますが、" +
-                    "型番やメーカー名を書き換えている痕跡のこともあります。"
+                else ctx.getString(R.string.os_partitions_note, diffs.joinToString())
             )
         }
-        items += Item("ビルド フィンガープリント", Build.FINGERPRINT)
-        return Section("OS / 端末情報", items)
+        items += Item(ctx.getString(R.string.os_fingerprint_label), Build.FINGERPRINT)
+        return Section(ctx.getString(R.string.os_section), items)
     }
 
     fun sdkName(sdk: Int): String = when (sdk) {

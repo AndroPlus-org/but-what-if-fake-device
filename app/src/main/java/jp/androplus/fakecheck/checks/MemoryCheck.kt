@@ -3,6 +3,7 @@ package jp.androplus.fakecheck.checks
 import android.app.ActivityManager
 import android.content.Context
 import jp.androplus.fakecheck.Item
+import jp.androplus.fakecheck.R
 import jp.androplus.fakecheck.Section
 import jp.androplus.fakecheck.Status
 import jp.androplus.fakecheck.Sys
@@ -32,43 +33,42 @@ object MemoryCheck {
         if (kernelTotal > 0) {
             val nominal = nominalRamGb(kernelTotal)
             items += Item(
-                "物理RAM (カーネル /proc/meminfo)",
-                "${Sys.gb(kernelTotal)}  → 公称 ${nominal.fmtGb()} 相当",
+                ctx.getString(R.string.mem_kernel_label),
+                ctx.getString(R.string.mem_kernel_value, Sys.gb(kernelTotal), nominal.fmtGb()),
                 Status.INFO,
-                "MemTotal は公称値より数%少なく表示されるのが普通です。"
+                ctx.getString(R.string.mem_kernel_note)
             )
         } else {
-            items += Item("物理RAM (カーネル /proc/meminfo)", "読み取り不可", Status.WARN)
+            items += Item(ctx.getString(R.string.mem_kernel_label), ctx.getString(R.string.common_unreadable), Status.WARN)
         }
 
-        items += Item("物理RAM (Android API)", Sys.gb(amInfo.totalMem))
+        items += Item(ctx.getString(R.string.mem_api_label), Sys.gb(amInfo.totalMem))
         if (kernelTotal > 0) {
             val diff = abs(amInfo.totalMem - kernelTotal).toDouble() / kernelTotal
             items += if (diff > 0.05) {
                 Item(
-                    "カーネル値とAPI値の一致",
-                    "不一致 (${Sys.f1(diff * 100)}% 差)",
+                    ctx.getString(R.string.mem_match_label),
+                    ctx.getString(R.string.mem_mismatch, Sys.f1(diff * 100)),
                     Status.NG,
-                    "Android フレームワークが返す RAM 容量がカーネルの値と食い違っています。フレームワーク改造による容量水増しの典型的な痕跡です。"
+                    ctx.getString(R.string.mem_mismatch_note)
                 )
             } else {
-                Item("カーネル値とAPI値の一致", "一致", Status.OK)
+                Item(ctx.getString(R.string.mem_match_label), ctx.getString(R.string.common_match), Status.OK)
             }
         }
 
-        items += Item("現在の空きRAM", "${Sys.gb(avail)} (lowMemory=${amInfo.lowMemory})")
+        items += Item(ctx.getString(R.string.mem_avail_label), "${Sys.gb(avail)} (lowMemory=${amInfo.lowMemory})")
 
         if (swapTotal > 0) {
             val combined = nominalRamGb(kernelTotal) + Math.round(swapTotal / 1073741824.0)
             items += Item(
-                "仮想RAM / RAM拡張 (スワップ)",
-                "${Sys.gb(swapTotal)} (使用中 ${Sys.gb(swapTotal - swapFree)})",
+                ctx.getString(R.string.mem_swap_label),
+                ctx.getString(R.string.mem_swap_value, Sys.gb(swapTotal), Sys.gb(swapTotal - swapFree)),
                 Status.INFO,
-                "ストレージや圧縮メモリ(zram)を使った仮想メモリで、物理RAMではありません。" +
-                    "「RAM ${combined.fmtGb()}」のように物理+仮想の合計で宣伝されている場合、実際の物理RAMは ${nominalRamGb(kernelTotal).fmtGb()} です。"
+                ctx.getString(R.string.mem_swap_note, combined.fmtGb(), nominalRamGb(kernelTotal).fmtGb())
             )
         } else {
-            items += Item("仮想RAM / RAM拡張 (スワップ)", "なし")
+            items += Item(ctx.getString(R.string.mem_swap_label), ctx.getString(R.string.common_none))
         }
 
         // ROM 改造で「設定」アプリに表示する容量を差し替えているケースがあるため、容量関連プロパティを列挙
@@ -77,19 +77,19 @@ object MemoryCheck {
             .filterKeys { !it.contains("dalvik") && !it.contains("heap") }
         if (props.isNotEmpty()) {
             items += Item(
-                "容量関連のシステムプロパティ",
+                ctx.getString(R.string.mem_props_label),
                 props.entries.joinToString("\n") { "${it.key} = ${it.value}" },
                 Status.INFO,
-                "設定アプリの表示容量がここの値から作られている場合があります。物理値と大きく違う値が無いか確認してください。"
+                ctx.getString(R.string.mem_props_note)
             )
         }
 
         items += Item(
-            "実測テスト",
-            "下の「RAM実測テスト」で実際にメモリを確保して確認できます",
+            ctx.getString(R.string.mem_test_label),
+            ctx.getString(R.string.mem_test_value),
             Status.INFO
         )
-        return Section("メモリ (RAM)", items)
+        return Section(ctx.getString(R.string.mem_section), items)
     }
 
     private fun Double.fmtGb(): String =
