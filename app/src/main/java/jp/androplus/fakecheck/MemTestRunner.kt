@@ -83,8 +83,8 @@ class MemTestRunner(
             peakSwapDelta = max(peakSwapDelta, Sys.diskSwapUsedBytes() - diskSwap0)
 
             onProgress(
-                "RAM実測中… 確保 ${Sys.gb(peakAlloc)} / 空き ${Sys.gb(avail)}" +
-                    if (peakSwapDelta > 0) " / ストレージへのスワップ ${Sys.mb(peakSwapDelta)}" else "",
+                ctx.getString(R.string.memt_progress, Sys.gb(peakAlloc), Sys.gb(avail)) +
+                    if (peakSwapDelta > 0) " / " + ctx.getString(R.string.memt_progress_swap, Sys.mb(peakSwapDelta)) else "",
                 if (total > 0) (peakAlloc * 100 / total).toInt() else 0
             )
 
@@ -123,23 +123,23 @@ class MemTestRunner(
         val ratio = if (total > 0) estimate.toDouble() / total else 0.0
 
         val reasonText = when {
-            reason == "KILLED" -> "メモリ不足でテストプロセスが強制終了 (正常な終わり方)"
-            reason == "SWAP" -> "物理RAMが埋まりストレージ上のスワップが使われ始めた"
-            reason == "LOWMEM" -> "空きRAMがほぼゼロになった"
-            reason == "LIMIT" -> "上限まで確保できた"
-            reason == "USER" -> "ユーザーが中断"
-            reason == "TIMEOUT" -> "時間切れ"
-            else -> "確保エラー: ${reason.removePrefix("ERROR ")}"
+            reason == "KILLED" -> ctx.getString(R.string.memt_reason_killed)
+            reason == "SWAP" -> ctx.getString(R.string.memt_reason_swap)
+            reason == "LOWMEM" -> ctx.getString(R.string.memt_reason_lowmem)
+            reason == "LIMIT" -> ctx.getString(R.string.memt_reason_limit)
+            reason == "USER" -> ctx.getString(R.string.memt_reason_user)
+            reason == "TIMEOUT" -> ctx.getString(R.string.memt_reason_timeout)
+            else -> ctx.getString(R.string.memt_reason_error, reason.removePrefix("ERROR "))
         }
-        items += Item("終了理由", reasonText)
-        items += Item("テスト開始時", "MemTotal ${Sys.gb(total)} / 空き ${Sys.gb(avail0)} / 使用中 ${Sys.gb(othersAtStart)}")
+        items += Item(ctx.getString(R.string.memt_reason_label), reasonText)
+        items += Item(ctx.getString(R.string.memt_start_label), ctx.getString(R.string.memt_start_value, Sys.gb(total), Sys.gb(avail0), Sys.gb(othersAtStart)))
         items += Item(
-            "確保して書き込めた量",
-            Sys.gb(peakAlloc) + if (swapDelta > 0) " (うちストレージへのスワップ ${Sys.mb(swapDelta)})" else ""
+            ctx.getString(R.string.memt_alloc_label),
+            Sys.gb(peakAlloc) + if (swapDelta > 0) " " + ctx.getString(R.string.memt_alloc_swap, Sys.mb(swapDelta)) else ""
         )
         items += Item(
-            "推定物理RAM",
-            "${Sys.gb(estimate)} (MemTotal の ${Sys.f1(ratio * 100)}%)",
+            ctx.getString(R.string.memt_est_label),
+            ctx.getString(R.string.memt_est_value, Sys.gb(estimate), Sys.f1(ratio * 100)),
             when {
                 reason == "USER" || reason == "TIMEOUT" -> Status.INFO
                 ratio >= 0.7 -> Status.OK
@@ -147,12 +147,12 @@ class MemTestRunner(
                 else -> Status.NG
             },
             when {
-                reason == "USER" || reason == "TIMEOUT" -> "テストが最後まで完了していないため判定しません。"
-                ratio >= 0.7 -> "申告どおりの物理RAMが実際に使えています (公称 ${MemoryCheck.nominalRamGb(total)}GB 相当)。"
-                ratio >= 0.5 -> "申告より少ない量しか確保できませんでした。他アプリが多く動いていると低めに出るので、再起動直後に再テストしてください。"
-                else -> "申告されている RAM 容量の半分も実際には使えません。RAM 容量が偽装されている疑いがあります。"
+                reason == "USER" || reason == "TIMEOUT" -> ctx.getString(R.string.memt_note_incomplete)
+                ratio >= 0.7 -> ctx.getString(R.string.memt_note_ok, MemoryCheck.nominalRamGb(total).toString())
+                ratio >= 0.5 -> ctx.getString(R.string.memt_note_warn)
+                else -> ctx.getString(R.string.memt_note_ng)
             }
         )
-        return Section("RAM実測テスト結果", items)
+        return Section(ctx.getString(R.string.memt_section), items)
     }
 }

@@ -6,6 +6,7 @@ import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.Build
 import jp.androplus.fakecheck.Item
+import jp.androplus.fakecheck.R
 import jp.androplus.fakecheck.Section
 import jp.androplus.fakecheck.Status
 import jp.androplus.fakecheck.Sys
@@ -47,16 +48,16 @@ object BatteryCheck {
         val temp = sticky?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)?.takeIf { it != Int.MIN_VALUE }
         val tech = sticky?.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY)
         items += Item(
-            "残量",
-            (level?.let { "${Sys.f1(it)}%" } ?: "不明") + (temp?.let { " / ${Sys.f1(it / 10.0)}℃" } ?: "") + (tech?.let { " / $it" } ?: "")
+            ctx.getString(R.string.bat_level_label),
+            (level?.let { "${Sys.f1(it)}%" } ?: ctx.getString(R.string.common_unknown)) + (temp?.let { " / ${Sys.f1(it / 10.0)}℃" } ?: "") + (tech?.let { " / $it" } ?: "")
         )
 
         val design = designCapacityMah(ctx)
         val sysDesign = sysfsMah("charge_full_design")
         val sysFull = sysfsMah("charge_full")
-        items += Item("設計容量 (電力プロファイル)", design?.let { "${it.toInt()} mAh" } ?: "取得不可")
-        if (sysDesign != null) items += Item("設計容量 (カーネル)", "${sysDesign.toInt()} mAh")
-        if (sysFull != null) items += Item("満充電容量 (カーネル, 劣化反映)", "${sysFull.toInt()} mAh")
+        items += Item(ctx.getString(R.string.bat_design_label), design?.let { "${it.toInt()} mAh" } ?: ctx.getString(R.string.common_unavailable))
+        if (sysDesign != null) items += Item(ctx.getString(R.string.bat_design_kernel_label), "${sysDesign.toInt()} mAh")
+        if (sysFull != null) items += Item(ctx.getString(R.string.bat_full_label), "${sysFull.toInt()} mAh")
 
         // 現在の残電荷量と残量%から満充電時の容量を推定
         var estimate: Double? = null
@@ -69,19 +70,21 @@ object BatteryCheck {
             val mah = counter / 1000.0
             estimate = est
             items += Item(
-                "推定満充電容量 (残電荷から計算)",
-                "${estimate.toInt()} mAh (現在 ${mah.toInt()} mAh)",
+                ctx.getString(R.string.bat_est_label),
+                ctx.getString(R.string.bat_est_value, estimate.toInt().toString(), mah.toInt().toString()),
                 Status.INFO,
-                "残量が多いほど精度が上がります。バッテリー残量計の精度に依存する目安です。"
+                ctx.getString(R.string.bat_est_note)
             )
         } else {
             items += Item(
-                "推定満充電容量 (残電荷から計算)",
-                when {
-                    level != null && level < 20 -> "残量20%以上で計算できます"
-                    est != null -> "計算不可 (端末が報告する残電荷量が不正確)"
-                    else -> "この端末は残電荷量を報告しません"
-                }
+                ctx.getString(R.string.bat_est_label),
+                ctx.getString(
+                    when {
+                        level != null && level < 20 -> R.string.bat_est_low
+                        est != null -> R.string.bat_est_bad
+                        else -> R.string.bat_est_none
+                    }
+                )
             )
         }
 
@@ -90,28 +93,27 @@ object BatteryCheck {
         if (claimed != null && measured != null) {
             val ratio = measured / claimed
             items += Item(
-                "設計容量と実容量の比",
+                ctx.getString(R.string.bat_ratio_label),
                 "${Sys.f1(ratio * 100)}%",
                 when {
                     ratio < 0.35 -> Status.NG
                     ratio < 0.7 -> Status.WARN
                     else -> Status.OK
                 },
-                if (ratio < 0.7) "実際に蓄えられる容量が設計値を大きく下回ります。容量の水増し表記か、バッテリーの劣化が考えられます。" +
-                    "2セル構成の端末(折りたたみ等)では1セル分しか報告されず半分程度に出ることがあります。" else null
+                if (ratio < 0.7) ctx.getString(R.string.bat_ratio_note) else null
             )
         }
         items += Item(
-            "見方",
-            "仕様表のバッテリー容量 (mAh) と比べてください。",
+            ctx.getString(R.string.common_how_to_read),
+            ctx.getString(R.string.bat_howto_value),
             Status.INFO,
-            "設計容量の値はメーカーが自由に設定できるため、推定満充電容量やカーネル値の方が実態に近い値です。"
+            ctx.getString(R.string.bat_howto_note)
         )
         if (Build.VERSION.SDK_INT >= 34) {
             // Android 14+ はサイクル数も取れる場合がある
             val cycles = sticky?.getIntExtra("android.os.extra.CYCLE_COUNT", -1) ?: -1
-            if (cycles >= 0) items += Item("充放電サイクル数", cycles.toString())
+            if (cycles >= 0) items += Item(ctx.getString(R.string.bat_cycles_label), cycles.toString())
         }
-        return Section("バッテリー", items)
+        return Section(ctx.getString(R.string.bat_section), items)
     }
 }

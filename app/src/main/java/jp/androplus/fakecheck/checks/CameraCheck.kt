@@ -8,6 +8,7 @@ import android.hardware.camera2.CameraMetadata
 import android.os.Build
 import android.util.Size
 import jp.androplus.fakecheck.Item
+import jp.androplus.fakecheck.R
 import jp.androplus.fakecheck.Section
 import jp.androplus.fakecheck.Status
 import jp.androplus.fakecheck.Sys
@@ -21,16 +22,16 @@ object CameraCheck {
         val cm = ctx.getSystemService(Context.CAMERA_SERVICE) as CameraManager
         val ids = try { cm.cameraIdList.toList() } catch (e: Exception) { emptyList() }
         if (ids.isEmpty()) {
-            items += Item("カメラ", "検出されません", Status.INFO)
-            return Section("カメラ", items)
+            items += Item(ctx.getString(R.string.cam_section), ctx.getString(R.string.cam_not_found), Status.INFO)
+            return Section(ctx.getString(R.string.cam_section), items)
         }
         for (id in ids) {
             try {
                 val c = cm.getCameraCharacteristics(id)
                 val facing = when (c.get(CameraCharacteristics.LENS_FACING)) {
-                    CameraMetadata.LENS_FACING_FRONT -> "前面"
-                    CameraMetadata.LENS_FACING_BACK -> "背面"
-                    else -> "外部"
+                    CameraMetadata.LENS_FACING_FRONT -> ctx.getString(R.string.cam_front)
+                    CameraMetadata.LENS_FACING_BACK -> ctx.getString(R.string.cam_back)
+                    else -> ctx.getString(R.string.cam_external)
                 }
                 val pixelArray = c.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
                 val active = c.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
@@ -64,29 +65,31 @@ object CameraCheck {
                     4 -> "EXTERNAL"
                     else -> "?"
                 }
-                val value = "センサー ${Sys.f1(sensorMp)}MP" +
-                    (pixelArray?.let { " (${it.width}×${it.height})" } ?: "") +
-                    " / 最大出力 ${Sys.f1(jpegMp)}MP" + (jpeg?.let { " (${it.width}×${it.height})" } ?: "") +
-                    " / HW $hwLevel" + if (logical) " / 論理マルチカメラ" else ""
+                val value = ctx.getString(
+                    R.string.cam_value,
+                    Sys.f1(sensorMp), pixelArray?.let { " (${it.width}×${it.height})" } ?: "",
+                    Sys.f1(jpegMp), jpeg?.let { " (${it.width}×${it.height})" } ?: "",
+                    hwLevel, if (logical) " / " + ctx.getString(R.string.cam_logical) else ""
+                )
                 // LEGACY HAL ではセンサー情報自体が出力サイズから作られていることがあるので判定しない
                 val interpolated = sensorMp > 0 && jpegMp > sensorMp * 1.1 && hwLevel != "LEGACY" && !logical
                 items += Item(
-                    "$facing カメラ (id $id)",
+                    ctx.getString(R.string.cam_item_label, facing, id),
                     value,
                     if (interpolated) Status.NG else Status.INFO,
-                    if (interpolated) "センサーの画素数より大きいサイズで出力しています。画素補間で「${Sys.f1(jpegMp)}MP」を名乗っている可能性があります。"
+                    if (interpolated) ctx.getString(R.string.cam_interp_note, Sys.f1(jpegMp))
                     else null
                 )
             } catch (e: Exception) {
-                items += Item("カメラ id $id", "取得失敗: ${e.javaClass.simpleName}", Status.WARN)
+                items += Item(ctx.getString(R.string.cam_error_label, id), ctx.getString(R.string.common_failed, e.javaClass.simpleName), Status.WARN)
             }
         }
         items += Item(
-            "見方",
-            "仕様表の画素数とセンサー画素数を比べてください。",
+            ctx.getString(R.string.common_how_to_read),
+            ctx.getString(R.string.cam_howto_value),
             Status.INFO,
-            "4画素を1画素にまとめるセンサー(クアッドベイヤー)では、通常の出力が公称の1/4になるのは正常です。"
+            ctx.getString(R.string.cam_howto_note)
         )
-        return Section("カメラ", items)
+        return Section(ctx.getString(R.string.cam_section), items)
     }
 }

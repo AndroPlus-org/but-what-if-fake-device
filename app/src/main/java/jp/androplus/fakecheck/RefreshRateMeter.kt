@@ -76,23 +76,24 @@ class RefreshRateMeter(
         } else d.refreshRate.toDouble()
         val ratio = medianFps / claimed
         val items = listOf(
-            Item("申告最大リフレッシュレート (現在の解像度)", "${Sys.f1(claimed)} Hz"),
+            Item(activity.getString(R.string.rr_claimed_label), "${Sys.f1(claimed)} Hz"),
             Item(
-                "実測 (フレーム間隔の中央値)",
+                activity.getString(R.string.rr_median_label),
                 "${Sys.f1(medianFps)} fps (${Sys.f2(medianMs)} ms)",
                 when {
                     ratio >= 0.9 -> Status.OK
                     ratio >= 0.6 -> Status.WARN
                     else -> Status.NG
                 },
-                when {
-                    ratio >= 0.9 -> "申告どおりのリフレッシュレートで描画されています。"
-                    else -> "申告より低いレートでしか描画されていません。省電力モードや設定の「滑らかな表示」を確認のうえ再測定してください。" +
-                        "それでも低い場合、高リフレッシュレート表記が実態と異なる可能性があります。"
-                }
+                activity.getString(
+                    when {
+                        ratio >= 0.9 -> R.string.rr_ok_note
+                        else -> R.string.rr_low_note
+                    }
+                )
             ),
-            Item("実測 (平均)", "${Sys.f1(avgFps)} fps (${frames.size} フレーム / 3秒)"),
+            Item(activity.getString(R.string.rr_avg_label), activity.getString(R.string.rr_avg_value, Sys.f1(avgFps), frames.size.toString())),
         )
-        onDone(Section("リフレッシュレート実測結果", items))
+        onDone(Section(activity.getString(R.string.rr_section), items))
     }
 }

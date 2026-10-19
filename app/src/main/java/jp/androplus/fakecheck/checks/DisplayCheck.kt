@@ -6,6 +6,7 @@ import android.util.DisplayMetrics
 import android.view.Display
 import android.view.WindowManager
 import jp.androplus.fakecheck.Item
+import jp.androplus.fakecheck.R
 import jp.androplus.fakecheck.Section
 import jp.androplus.fakecheck.Status
 import jp.androplus.fakecheck.Sys
@@ -27,37 +28,37 @@ object DisplayCheck {
         val w = max(dm.widthPixels, dm.heightPixels)
         val h = min(dm.widthPixels, dm.heightPixels)
 
-        items += Item("描画解像度", "$w × $h", Status.INFO, "アプリが実際に描画しているピクセル数。")
+        items += Item(ctx.getString(R.string.disp_render_label), "$w × $h", Status.INFO, ctx.getString(R.string.disp_render_note))
 
         if (Build.VERSION.SDK_INT >= 23) {
             val mode = d.mode
             val pw = max(mode.physicalWidth, mode.physicalHeight)
             val ph = min(mode.physicalWidth, mode.physicalHeight)
-            items += Item("パネル解像度 (ディスプレイモード)", "$pw × $ph")
+            items += Item(ctx.getString(R.string.disp_panel_label), "$pw × $ph")
             if (pw != w || ph != h) {
                 items += Item(
-                    "解像度の差",
-                    "描画 $w×$h ≠ パネル $pw×$ph",
+                    ctx.getString(R.string.disp_diff_label),
+                    ctx.getString(R.string.disp_diff_value, "$w×$h", "$pw×$ph"),
                     Status.INFO,
-                    "設定の「画面解像度」や省電力のための自動解像度切替で下げて描画しています。多くの端末の標準動作で、偽装ではありません。目視テストは最高解像度に設定してから行ってください。"
+                    ctx.getString(R.string.disp_diff_note)
                 )
             }
             val modes = d.supportedModes
             items += Item(
-                "対応ディスプレイモード",
+                ctx.getString(R.string.disp_modes_label),
                 modes.joinToString("\n") {
                     "${max(it.physicalWidth, it.physicalHeight)}×${min(it.physicalWidth, it.physicalHeight)} @ ${Sys.f1(it.refreshRate.toDouble())}Hz"
                 }
             )
             val maxHz = modes.maxOf { it.refreshRate }
             items += Item(
-                "最大リフレッシュレート (申告)",
+                ctx.getString(R.string.disp_maxhz_label),
                 "${Sys.f1(maxHz.toDouble())} Hz",
                 Status.INFO,
-                "下の「リフレッシュレート実測」で実際の描画fpsを測れます。"
+                ctx.getString(R.string.disp_maxhz_note)
             )
         } else {
-            items += Item("リフレッシュレート (申告)", "${Sys.f1(d.refreshRate.toDouble())} Hz")
+            items += Item(ctx.getString(R.string.disp_hz_label), "${Sys.f1(d.refreshRate.toDouble())} Hz")
         }
 
         // xdpi / ydpi はパネルの物理ピクセル密度としてベンダーが設定する値
@@ -67,13 +68,12 @@ object DisplayCheck {
         val ppi = sqrt((dm.widthPixels.toDouble() * dm.widthPixels + dm.heightPixels.toDouble() * dm.heightPixels)) / diag
         val sane = diag in 3.0..40.0
         items += Item(
-            "画面サイズ (dpi値からの計算)",
-            "${Sys.f1(diag)} インチ / ${Sys.f1(ppi)} ppi (xdpi=${Sys.f1(dm.xdpi.toDouble())}, ydpi=${Sys.f1(dm.ydpi.toDouble())})",
+            ctx.getString(R.string.disp_size_label),
+            ctx.getString(R.string.disp_size_value, Sys.f1(diag), Sys.f1(ppi), Sys.f1(dm.xdpi.toDouble()), Sys.f1(dm.ydpi.toDouble())),
             Status.INFO,
-            if (sane) "定規で測った画面の対角と比べてください。大きく違う場合、ベンダー設定値が不正確です。"
-            else "この端末はdpi値を正しく設定していないため、画面サイズを計算できません (偽装とは限りません)。"
+            ctx.getString(if (sane) R.string.disp_size_note_ok else R.string.disp_size_note_bad)
         )
-        items += Item("論理密度", "${dm.densityDpi} dpi (scale ${Sys.f2(dm.density.toDouble())})")
+        items += Item(ctx.getString(R.string.disp_density_label), "${dm.densityDpi} dpi (scale ${Sys.f2(dm.density.toDouble())})")
 
         if (Build.VERSION.SDK_INT >= 24) {
             val hdr = d.hdrCapabilities
@@ -86,19 +86,18 @@ object DisplayCheck {
                     else -> "type$it"
                 }
             }.orEmpty()
-            items += Item("HDR対応", if (types.isEmpty()) "なし" else types.joinToString(", "))
+            items += Item(ctx.getString(R.string.disp_hdr_label), if (types.isEmpty()) ctx.getString(R.string.common_none) else types.joinToString(", "))
         }
         if (Build.VERSION.SDK_INT >= 26) {
-            items += Item("広色域 (Wide Color Gamut)", if (d.isWideColorGamut) "対応" else "非対応")
+            items += Item(ctx.getString(R.string.disp_wcg_label), ctx.getString(if (d.isWideColorGamut) R.string.common_supported else R.string.common_unsupported))
         }
 
         items += Item(
-            "目視テスト",
-            "「ディスプレイ表示テスト」で 1ピクセル縞模様・グラデーション・単色・マルチタッチを確認できます。",
+            ctx.getString(R.string.disp_visual_label),
+            ctx.getString(R.string.disp_visual_value),
             Status.INFO,
-            "1px の縞模様をスマホのカメラ等で拡大して、縞がきれいに見えずグレーやモアレになる場合、" +
-                "実際のパネル解像度は申告より低い(縮小表示されている)可能性があります。"
+            ctx.getString(R.string.disp_visual_note)
         )
-        return Section("ディスプレイ", items)
+        return Section(ctx.getString(R.string.disp_section), items)
     }
 }

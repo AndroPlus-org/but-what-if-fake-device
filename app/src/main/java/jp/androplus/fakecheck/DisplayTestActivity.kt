@@ -52,21 +52,21 @@ class DisplayTestActivity : Activity() {
 
     private class PatternView(context: Context) : View(context) {
 
-        private data class Page(val title: String, val hint: String)
+        private data class Page(val title: Int, val hint: Int)
 
         private val pages = listOf(
-            Page("1px 縦縞", "拡大すると白黒の縦線が1本ずつ見えるはず。グレー一色やモアレ(うねり模様)なら実パネルは低解像度の疑い"),
-            Page("1px 横縞", "同上 (横方向)"),
-            Page("1px 市松模様", "拡大して白黒の格子が見えるか確認"),
-            Page("2px 縦縞", "1px と比べる用"),
-            Page("グレーのグラデーション", "縞(段差)がはっきり見える場合は 6bit パネル等の可能性。「10bit」宣伝の確認に"),
-            Page("RGB グラデーション", "色ごとの段差・色ムラを確認"),
-            Page("白", "輝度ムラ・ドット抜け (黒い点)"),
-            Page("黒", "光漏れ・常時点灯ドット"),
-            Page("赤", "ドット抜け"),
-            Page("緑", "ドット抜け"),
-            Page("青", "ドット抜け"),
-            Page("マルチタッチ", "指を何本も置いて最大同時タッチ数を確認。終了は戻るボタン"),
+            Page(R.string.dt_vstripe1, R.string.dt_vstripe1_hint),
+            Page(R.string.dt_hstripe1, R.string.dt_hstripe1_hint),
+            Page(R.string.dt_checker, R.string.dt_checker_hint),
+            Page(R.string.dt_vstripe2, R.string.dt_vstripe2_hint),
+            Page(R.string.dt_gray, R.string.dt_gray_hint),
+            Page(R.string.dt_rgb, R.string.dt_rgb_hint),
+            Page(R.string.dt_white, R.string.dt_white_hint),
+            Page(R.string.dt_black, R.string.dt_black_hint),
+            Page(R.string.dt_red, R.string.dt_dead_hint),
+            Page(R.string.dt_green, R.string.dt_dead_hint),
+            Page(R.string.dt_blue, R.string.dt_dead_hint),
+            Page(R.string.dt_touch, R.string.dt_touch_hint),
         )
         private var page = 0
         private val paint = Paint()
@@ -123,7 +123,7 @@ class DisplayTestActivity : Activity() {
                     val r = 40f * resources.displayMetrics.density
                     pointers.values.forEach { (x, y) -> canvas.drawCircle(x, y, r, touchPaint) }
                     val big = Paint(text).apply { textSize = text.textSize * 3 }
-                    canvas.drawText("現在 ${pointers.size} 点 / 最大 $maxPointers 点", 40f, h / 2, big)
+                    canvas.drawText(context.getString(R.string.dt_touch_count, pointers.size.toString(), maxPointers.toString()), 40f, h / 2, big)
                 }
             }
             if (showLabel || page == 11) drawLabel(canvas)
@@ -136,12 +136,15 @@ class DisplayTestActivity : Activity() {
             if (Build.VERSION.SDK_INT >= 23) {
                 @Suppress("DEPRECATION")
                 val mode = (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.mode
-                panel = "  パネル ${max(mode.physicalWidth, mode.physicalHeight)}×${min(mode.physicalWidth, mode.physicalHeight)}"
+                panel = "  " + context.getString(R.string.dt_panel, "${max(mode.physicalWidth, mode.physicalHeight)}×${min(mode.physicalWidth, mode.physicalHeight)}")
             }
             val lines = listOf(
-                "${page + 1}/${pages.size} ${p.title}  (描画 ${width}×${height}$panel, ${dm.densityDpi}dpi)",
-                p.hint,
-                "タップ: 次へ  長押し: この説明を隠す/表示  戻る: 終了",
+                context.getString(
+                    R.string.dt_header, (page + 1).toString(), pages.size.toString(), context.getString(p.title),
+                    "${width}×${height}", panel, dm.densityDpi.toString()
+                ),
+                context.getString(p.hint),
+                context.getString(R.string.dt_controls),
             )
             val lh = text.textSize * 1.4f
             val maxW = lines.maxOf { text.measureText(it) }

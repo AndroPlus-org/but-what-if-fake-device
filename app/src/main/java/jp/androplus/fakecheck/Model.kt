@@ -1,11 +1,13 @@
 package jp.androplus.fakecheck
 
-/** [color] はバッジ背景、[darkText] はダークテーマで文字色に使う明るめの色 */
-enum class Status(val label: String, val color: Int, val darkText: Int) {
-    OK("OK", 0xFF2E7D32.toInt(), 0xFF81C784.toInt()),
-    WARN("注意", 0xFFEF6C00.toInt(), 0xFFFFB74D.toInt()),
-    NG("疑い", 0xFFC62828.toInt(), 0xFFEF9A9A.toInt()),
-    INFO("情報", 0xFF546E7A.toInt(), 0xFFB0BEC5.toInt()),
+import android.content.Context
+
+/** [label] は表示名の文字列リソース、[color] はバッジ背景、[darkText] はダークテーマで文字色に使う明るめの色 */
+enum class Status(val label: Int, val color: Int, val darkText: Int) {
+    OK(R.string.status_ok, 0xFF2E7D32.toInt(), 0xFF81C784.toInt()),
+    WARN(R.string.status_warn, 0xFFEF6C00.toInt(), 0xFFFFB74D.toInt()),
+    NG(R.string.status_ng, 0xFFC62828.toInt(), 0xFFEF9A9A.toInt()),
+    INFO(R.string.status_info, 0xFF546E7A.toInt(), 0xFFB0BEC5.toInt()),
 }
 
 data class Item(
@@ -23,10 +25,10 @@ data class Section(val title: String, val items: List<Item>) {
         else -> Status.INFO
     }
 
-    fun toText(): String = buildString {
+    fun toText(ctx: Context): String = buildString {
         append("■ ").append(title).append('\n')
         for (i in items) {
-            append("  [").append(i.status.label).append("] ").append(i.label).append(": ").append(i.value).append('\n')
+            append("  [").append(ctx.getString(i.status.label)).append("] ").append(i.label).append(": ").append(i.value).append('\n')
             i.note?.let { append("      ").append(it.replace("\n", "\n      ")).append('\n') }
         }
     }
