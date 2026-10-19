@@ -32,12 +32,14 @@ import jp.androplus.fakecheck.checks.DisplayCheck
 import jp.androplus.fakecheck.checks.FeatureCheck
 import jp.androplus.fakecheck.checks.MemoryCheck
 import jp.androplus.fakecheck.checks.OsCheck
+import jp.androplus.fakecheck.checks.ShizukuCheck
 import jp.androplus.fakecheck.checks.SocCheck
 import jp.androplus.fakecheck.checks.StorageCheck
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.concurrent.thread
+import rikka.shizuku.Shizuku
 
 class MainActivity : Activity() {
 
@@ -83,11 +85,15 @@ class MainActivity : Activity() {
         // 前回のストレージテストが強制終了などで中断していたら、残ったテスト用ファイルを消す
         thread(name = "cleanup") { StorageTest.cleanup(applicationContext) }
         runStaticChecks()
+        // Shizuku が動いていて許可済みなら、追加チェックも自動で実行する
+        Shizuku.addBinderReceivedListenerSticky(shizukuReceived)
     }
 
     override fun onDestroy() {
         memTest?.stop()
         storageTest?.stop()
+        Shizuku.removeBinderReceivedListener(shizukuReceived)
+        ShizukuShell.unbind()
         super.onDestroy()
     }
 
@@ -129,6 +135,7 @@ class MainActivity : Activity() {
         btn(R.string.storage_test) { chooseStorageTarget() }
         btn(R.string.btn_refresh) { measureRefresh() }
         btn(R.string.btn_display_test) { startActivity(Intent(this, DisplayTestActivity::class.java)) }
+        btn(R.string.btn_shizuku) { shizukuClicked() }
         btn(R.string.btn_share) { share() }
         btn(R.string.btn_recheck) { runStaticChecks() }
         root.addView(buttons)
@@ -291,6 +298,62 @@ class MainActivity : Activity() {
         }
     }
 
+    // ---------------------------------------------------------------- Shizuku
+
+    private val shizukuReceived = Shizuku.OnBinderReceivedListener {
+        if (ShizukuShell.state() == ShizukuShell.State.READY) runShizuku(manual = false)
+    }
+
+    private fun shizukuClicked() {
+        when (ShizukuShell.state()) {
+            ShizukuShell.State.UNAVAILABLE -> AlertDialog.Builder(this)
+                .setTitle(R.string.shz_unavailable_title)
+                .setMessage(R.string.shz_unavailable_msg)
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+            ShizukuShell.State.OLD_VERSION -> Toast.makeText(this, R.string.shz_old, Toast.LENGTH_LONG).show()
+            ShizukuShell.State.NO_PERMISSION -> ShizukuShell.requestPermission { granted ->
+                handler.post {
+                    if (granted) runShizuku(manual = true)
+                    else Toast.makeText(this, R.string.shz_denied, Toast.LENGTH_LONG).show()
+                }
+            }
+            ShizukuShell.State.READY -> {
+                if (busy()) return
+                runShizuku(manual = true)
+            }
+        }
+    }
+
+    private var shizukuRunning = false
+
+    /** 自動実行時は進捗表示を出さず、他のテストを妨げない */
+    private fun runShizuku(manual: Boolean) {
+        if (shizukuRunning) return
+        shizukuRunning = true
+        if (manual) showProgress(getString(R.string.shz_running), 0, indeterminate = true, stop = null)
+        val app = applicationContext
+        ShizukuShell.bind(app) { ok ->
+            thread(name = "shizuku") {
+                val sec = if (ok) {
+                    try {
+                        ShizukuCheck.run(app)
+                    } catch (t: Throwable) {
+                        Section(getString(R.string.shz_section), listOf(Item(getString(R.string.check_failed), t.toString(), Status.WARN)))
+                    }
+                } else {
+                    Section(getString(R.string.shz_section), listOf(Item(getString(R.string.common_error), getString(R.string.shz_failed), Status.WARN)))
+                }
+                handler.post {
+                    shizukuRunning = false
+                    if (manual) hideProgress()
+                    testSections[sec.title] = sec
+                    render()
+                }
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- RAM
 
     private fun confirmMemTest() {
@@ -312,7 +375,8 @@ class MainActivity : Activity() {
                 hideProgress()
                 testSections[sec.title] = sec
                 render()
-            }
+            },
+            zramWriteback = if (ShizukuShell.isConnected) ({ ShizukuShell.zramWritebackBytes() }) else null
         )
         memTest = runner
         showProgress(getString(R.string.mem_test_starting), 0, stop = { runner.stop() })
