@@ -29,10 +29,7 @@
 
 ## インストール
 
-GitHub Actions でビルドした APK を使います。
-
-- 各ブランチのビルド: Actions → 「Build APK」→ Artifacts の `FakeDeviceChecker-apk`
-- `v*` タグを打つと Releases に APK が添付されます
+[Releases ページ](https://github.com/AndroPlus-org/but-what-if-fake-device/releases) の最新リリースを開き、Assets から `FakeDeviceChecker.apk` をダウンロードしてインストールしてください。
 
 Android 7.0（API 24）以上に対応しています。Android の権限は要求しません（Shizuku連携を使う場合だけ、Shizuku アプリ上で許可を求めます）。
 
@@ -45,29 +42,6 @@ Android 7.0（API 24）以上に対応しています。Android の権限は要�
 - `dumpsys meminfo` の総RAM、`wm size` の物理画面サイズを、アプリ向けの値と突き合わせます
 
 shell 権限でも SELinux で読めない項目は「読み取り不可」と表示します。カーネル自体が偽装している場合は shell 権限でも見抜けません。
-
-### 署名鍵の設定 (上書きインストール用)
-
-GitHub Secrets に署名鍵を登録すると、すべてのビルドが同じ鍵で署名され、新しい APK を上書きインストールできます。未登録の場合はビルドごとに署名が変わります。
-
-1. 鍵を作る (パスワードは任意。鍵ファイルは安全な場所に保管し、リポジトリには入れない)
-
-   ```sh
-   keytool -genkeypair -keystore signing.keystore -storetype PKCS12 -alias fakecheck \
-     -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=FakeDeviceChecker"
-   base64 -w0 signing.keystore   # macOS は base64 -i signing.keystore
-   ```
-
-2. リポジトリの Settings → Secrets and variables → Actions に登録
-
-   | 名前 | 値 |
-   |---|---|
-   | `SIGNING_KEYSTORE_BASE64` | 上の base64 出力 |
-   | `SIGNING_STORE_PASSWORD` | 鍵ストアのパスワード |
-   | `SIGNING_KEY_ALIAS` | `fakecheck` |
-   | `SIGNING_KEY_PASSWORD` | 鍵のパスワード (PKCS12 なら鍵ストアと同じ。省略可) |
-
-登録前のビルドを入れている場合だけ、一度アンインストールしてから入れ直してください。
 
 ## 実測テストの注意
 
