@@ -12,7 +12,7 @@ import rikka.shizuku.Shizuku
  * Shizuku 経由で ShellService を起動し、shell 権限でコマンドを実行する窓口。
  * Shizuku が無い・許可されていない端末では何もしない (アプリの他の機能はそのまま動く)。
  */
-object ShizukuShell {
+object ShizukuShell : PrivShell {
 
     enum class State { UNAVAILABLE, OLD_VERSION, NO_PERMISSION, READY }
 
@@ -36,7 +36,7 @@ object ShizukuShell {
     }
 
     /** 0 = root, 2000 = shell */
-    fun uid(): Int = try { Shizuku.getUid() } catch (t: Throwable) { -1 }
+    override fun uid(): Int = try { Shizuku.getUid() } catch (t: Throwable) { -1 }
 
     fun requestPermission(onResult: (Boolean) -> Unit) {
         val listener = object : Shizuku.OnRequestPermissionResultListener {
@@ -118,21 +118,8 @@ object ShizukuShell {
     }
 
     /** shell 権限でコマンドを実行する (時間がかかるのでメインスレッドで呼ばない) */
-    fun exec(cmd: String): String? = call(ShellService.TX_EXEC, cmd)
+    override fun exec(cmd: String): String? = call(ShellService.TX_EXEC, cmd)
 
     /** shell 権限でファイルを読む。プロセスを起動しないので短時間で返る */
-    fun read(path: String): String? = call(ShellService.TX_READ, path)?.takeIf { it.isNotEmpty() }
-
-    /**
-     * zram が「RAM拡張」としてストレージに書き出している量。
-     * bd_stat の1列目が書き出し済みページ数 (4KiB 単位)。読めない場合は 0。
-     */
-    fun zramWritebackBytes(): Long {
-        var total = 0L
-        for (i in 0..3) {
-            val s = read("/sys/block/zram$i/bd_stat") ?: continue
-            total += (s.trim().split(Regex("\\s+")).firstOrNull()?.toLongOrNull() ?: 0L) * 4096
-        }
-        return total
-    }
+    override fun read(path: String): String? = call(ShellService.TX_READ, path)?.takeIf { it.isNotEmpty() }
 }

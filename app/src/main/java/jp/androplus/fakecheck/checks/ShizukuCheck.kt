@@ -2,6 +2,7 @@ package jp.androplus.fakecheck.checks
 
 import android.content.Context
 import jp.androplus.fakecheck.Item
+import jp.androplus.fakecheck.PrivShell
 import jp.androplus.fakecheck.R
 import jp.androplus.fakecheck.Section
 import jp.androplus.fakecheck.ShizukuShell
@@ -12,13 +13,12 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Shizuku (shell 権限) でしか読めない情報を使った追加チェック。
- * ShizukuShell に接続済みの状態で、メインスレッド以外から呼ぶ。
+ * shell 権限 (Shizuku) または root 権限 (Shizuku / su) でしか読めない情報を使った追加チェック。
+ * [sh] に接続済みの状態で、メインスレッド以外から呼ぶ。root なら RootCheck の項目も続けて追加する。
  */
 object ShizukuCheck {
 
-    fun run(ctx: Context): Section {
-        val sh = ShizukuShell
+    fun run(ctx: Context, sh: PrivShell = ShizukuShell, title: String = ctx.getString(R.string.shz_section)): Section {
         val items = ArrayList<Item>()
 
         val uid = sh.uid()
@@ -147,6 +147,8 @@ object ShizukuCheck {
             items += Item(ctx.getString(R.string.shz_cpufreq_label), freqs.joinToString("\n"))
         }
 
-        return Section(ctx.getString(R.string.shz_section), items)
+        if (sh.isRoot) items += RootCheck.items(ctx, sh)
+
+        return Section(title, items)
     }
 }

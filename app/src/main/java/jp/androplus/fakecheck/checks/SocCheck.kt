@@ -26,11 +26,16 @@ object SocCheck {
         0xc0d to "Cortex-A17", 0xc09 to "Cortex-A9",
     )
 
-    data class Gpu(val vendor: String, val renderer: String, val version: String)
+    const val QUALCOMM = "Qualcomm"
+    const val MEDIATEK = "MediaTek"
+    const val UNISOC = "Unisoc"
+    const val ROCKCHIP = "Rockchip"
+    const val ALLWINNER = "Allwinner"
+    const val EXYNOS = "Samsung Exynos"
+    const val TENSOR = "Google Tensor"
 
-    fun run(ctx: Context): Section {
-        val items = ArrayList<Item>()
-
+    /** 端末が名乗っている SoC 関連の値 (ビルド情報・プロパティ・/proc/cpuinfo) */
+    fun claims(): LinkedHashMap<String, String> {
         val claims = linkedMapOf<String, String>()
         if (Build.VERSION.SDK_INT >= 31) {
             claims["Build.SOC_MANUFACTURER"] = Build.SOC_MANUFACTURER
@@ -43,6 +48,30 @@ object SocCheck {
         }
         val cpuinfo = Sys.read("/proc/cpuinfo").orEmpty()
         Regex("(?im)^Hardware\\s*:\\s*(.+)$").find(cpuinfo)?.let { claims["/proc/cpuinfo Hardware"] = it.groupValues[1].trim() }
+        return claims
+    }
+
+    /** 文字列に含まれる SoC ベンダー名。デバイスツリーの compatible (例: "mediatek,mt6765") にも使える */
+    fun vendorsIn(text: String): List<String> {
+        val t = text.lowercase()
+        return listOfNotNull(
+            QUALCOMM.takeIf { Regex("qcom|\\bqti\\b|qualcomm|snapdragon|\\bsdm\\d|\\bsm\\d{4}|msm\\d|\\b(kona|lahaina|taro|kalama|pineapple|holi|bengal|lito|trinket|parrot|crow|blair|sun)\\b").containsMatchIn(t) },
+            MEDIATEK.takeIf { Regex("mediatek|\\bmt\\d{4}|helio|dimensity").containsMatchIn(t) },
+            UNISOC.takeIf { Regex("unisoc|spreadtrum|sprd|\\bums\\d|\\bsc98|\\bsp98|\\bt6\\d\\d|\\bt7\\d\\d|\\bt8\\d\\d|tiger").containsMatchIn(t) },
+            ROCKCHIP.takeIf { Regex("rockchip|\\brk3\\d{3}").containsMatchIn(t) },
+            ALLWINNER.takeIf { Regex("allwinner|\\bsun\\d+iw?\\d*").containsMatchIn(t) },
+            EXYNOS.takeIf { Regex("exynos|samsung|\\bs5e\\d").containsMatchIn(t) },
+            TENSOR.takeIf { Regex("tensor|gs101|gs201|zuma").containsMatchIn(t) },
+        )
+    }
+
+    data class Gpu(val vendor: String, val renderer: String, val version: String)
+
+    fun run(ctx: Context): Section {
+        val items = ArrayList<Item>()
+
+        val claims = claims()
+        val cpuinfo = Sys.read("/proc/cpuinfo").orEmpty()
         items += Item(ctx.getString(R.string.soc_id_label), claims.entries.joinToString("\n") { "${it.key} = ${it.value}" })
 
         // コア構成
@@ -70,20 +99,12 @@ object SocCheck {
         }
 
         // 整合性チェック: 名乗っている SoC ベンダーと GPU が合っているか
-        val claimText = claims.values.joinToString(" ").lowercase()
-        val claimsQcom = Regex("qcom|\\bqti\\b|qualcomm|snapdragon|\\bsdm\\d|\\bsm\\d{4}|msm\\d|\\b(kona|lahaina|taro|kalama|pineapple|holi|bengal|lito|trinket|parrot|crow|blair|sun)\\b").containsMatchIn(claimText)
-        val claimsMtk = Regex("mediatek|\\bmt\\d{4}|helio|dimensity").containsMatchIn(claimText)
-        val claimsUnisoc = Regex("unisoc|spreadtrum|sprd|\\bums\\d|\\bsc98|\\bsp98|\\bt6\\d\\d|\\bt7\\d\\d|\\bt8\\d\\d|tiger").containsMatchIn(claimText)
-        val claimsRockchip = Regex("rockchip|\\brk3\\d{3}").containsMatchIn(claimText)
-        val claimsAllwinner = Regex("allwinner|\\bsun\\d+iw?\\d*").containsMatchIn(claimText)
-        val claimsExynos = Regex("exynos|samsung|\\bs5e\\d").containsMatchIn(claimText)
-        val claimsTensor = Regex("tensor|gs101|gs201|zuma").containsMatchIn(claimText)
-
-        val vendors = listOfNotNull(
-            "Qualcomm".takeIf { claimsQcom }, "MediaTek".takeIf { claimsMtk }, "Unisoc".takeIf { claimsUnisoc },
-            "Rockchip".takeIf { claimsRockchip }, "Allwinner".takeIf { claimsAllwinner },
-            "Samsung Exynos".takeIf { claimsExynos }, "Google Tensor".takeIf { claimsTensor },
-        )
+        val vendors = vendorsIn(claims.values.joinToString(" "))
+        val claimsQcom = QUALCOMM in vendors
+        val claimsMtk = MEDIATEK in vendors
+        val claimsUnisoc = UNISOC in vendors
+        val claimsRockchip = ROCKCHIP in vendors
+        val claimsAllwinner = ALLWINNER in vendors
         if (vendors.size >= 2) {
             items += Item(
                 ctx.getString(R.string.soc_consistency_label),
