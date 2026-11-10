@@ -43,6 +43,10 @@ import rikka.shizuku.Shizuku
 
 class MainActivity : Activity() {
 
+    companion object {
+        private const val PREF_ROOT_AUTO = "root_auto"
+    }
+
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var content: LinearLayout
     private lateinit var summary: TextView
@@ -87,13 +91,18 @@ class MainActivity : Activity() {
         runStaticChecks()
         // Shizuku が動いていて許可済みなら、追加チェックも自動で実行する
         Shizuku.addBinderReceivedListenerSticky(shizukuReceived)
+        // 前回 root チェックを許可していれば、今回も自動で実行する (root 管理アプリが許可を記憶している)
+        if (prefs().getBoolean(PREF_ROOT_AUTO, false) && RootShell.suExists()) runRoot(manual = false)
     }
+
+    private fun prefs() = getSharedPreferences("settings", MODE_PRIVATE)
 
     override fun onDestroy() {
         memTest?.stop()
         storageTest?.stop()
         Shizuku.removeBinderReceivedListener(shizukuReceived)
         ShizukuShell.unbind()
+        thread(name = "su-close") { RootShell.close() }
         super.onDestroy()
     }
 
@@ -136,6 +145,7 @@ class MainActivity : Activity() {
         btn(R.string.btn_refresh) { measureRefresh() }
         btn(R.string.btn_display_test) { startActivity(Intent(this, DisplayTestActivity::class.java)) }
         btn(R.string.btn_shizuku) { shizukuClicked() }
+        btn(R.string.btn_root) { rootClicked() }
         btn(R.string.btn_share) { share() }
         btn(R.string.btn_recheck) { runStaticChecks() }
         root.addView(buttons)
@@ -354,6 +364,67 @@ class MainActivity : Activity() {
         }
     }
 
+    // ---------------------------------------------------------------- root (su)
+
+    private fun rootClicked() {
+        if (busy()) return
+        if (!RootShell.suExists()) {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.root_unavailable_title)
+                .setMessage(R.string.root_unavailable_msg)
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+            return
+        }
+        if (RootShell.isConnected) {
+            runRoot(manual = true)
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.root_section)
+            .setMessage(R.string.root_confirm_msg)
+            .setPositiveButton(R.string.start) { _, _ -> runRoot(manual = true) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private var rootRunning = false
+
+    private fun runRoot(manual: Boolean) {
+        if (rootRunning) return
+        rootRunning = true
+        if (manual) showProgress(getString(R.string.root_running), 0, indeterminate = true, stop = null)
+        val app = applicationContext
+        thread(name = "root") {
+            val ok = RootShell.open()
+            val sec = if (ok) {
+                try {
+                    ShizukuCheck.run(app, RootShell, getString(R.string.root_section))
+                } catch (t: Throwable) {
+                    Section(getString(R.string.root_section), listOf(Item(getString(R.string.check_failed), t.toString(), Status.WARN)))
+                }
+            } else null
+            handler.post {
+                rootRunning = false
+                if (manual) hideProgress()
+                prefs().edit().putBoolean(PREF_ROOT_AUTO, ok).apply()
+                if (sec != null) {
+                    testSections[sec.title] = sec
+                    render()
+                } else if (manual) {
+                    Toast.makeText(this, R.string.root_denied, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    /** RAM実測テストなどで使う、接続済みの昇格シェル (root を優先) */
+    private fun privShell(): PrivShell? = when {
+        RootShell.isConnected -> RootShell
+        ShizukuShell.isConnected -> ShizukuShell
+        else -> null
+    }
+
     // ---------------------------------------------------------------- RAM
 
     private fun confirmMemTest() {
@@ -376,7 +447,7 @@ class MainActivity : Activity() {
                 testSections[sec.title] = sec
                 render()
             },
-            zramWriteback = if (ShizukuShell.isConnected) ({ ShizukuShell.zramWritebackBytes() }) else null
+            zramWriteback = privShell()?.let { sh -> { sh.zramWritebackBytes() } }
         )
         memTest = runner
         showProgress(getString(R.string.mem_test_starting), 0, stop = { runner.stop() })
